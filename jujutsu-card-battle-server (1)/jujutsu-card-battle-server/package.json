@@ -1,0 +1,10 @@
+{
+  "name": "jujutsu-card-battle",
+  "version": "1.0.0",
+  "description": "Jujutsu Card Battle: game page plus the authoritative match server",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}

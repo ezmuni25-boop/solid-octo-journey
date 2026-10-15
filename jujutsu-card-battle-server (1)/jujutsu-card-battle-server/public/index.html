@@ -1,0 +1,2621 @@
+<title>Jujutsu Card Battle</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Hanken+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: menu, card picking, battle and card info screens, shown one at a time. Single dark look by choice.
+   Card Info: a grid of cards; clicking one lifts it left of center with a role/style panel to its right. */
+:root {
+  --bg: #0d1218;
+  --table: #121a23;
+  --line: #26323f;
+  --fg: #e4e8ef;
+  --muted: #8c98a8;
+  --accent: #8793ff;
+  --f-title: "Anton", Impact, "Arial Narrow", sans-serif;
+  --f-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.4;
+  padding-block: 14px 28px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 880px; margin: 0 auto; display: grid; gap: 12px; }
+h1, h2 { font-family: var(--f-title); font-weight: 400; letter-spacing: .03em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+
+.screen { display: grid; gap: 12px; min-width: 0; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.top h1 { font-size: 28px; }
+.panel { background: var(--table); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-height: 240px; display: grid; place-items: center; text-align: center; color: var(--muted); }
+
+.menu { display: grid; justify-items: center; text-align: center; gap: 14px; padding-block: clamp(32px, 14vh, 120px) 24px; }
+.logo { font-size: clamp(44px, 12vw, 84px); line-height: 1; }
+.menu-list { display: grid; gap: 10px; width: 100%; max-width: 320px; margin-top: 18px; }
+
+.btn { font: inherit; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 10px 16px; border: 1px solid var(--accent); background: var(--accent); color: #0d1030; min-height: 44px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; border-color: var(--line); }
+.btn:hover:not(:disabled) { filter: brightness(1.15); }
+.btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.btn.big { width: 100%; font-size: 17px; padding: 14px 18px; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.btn.alt { background: transparent; color: var(--fg); }
+.btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); padding: 6px 12px; min-height: 0; font-weight: 600; font-size: 13px; }
+.btn.big small { font-family: var(--f-mono); font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .04em; }
+
+/* card info */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 220px)); gap: 20px 16px; justify-content: start; padding: 8px 4px; }
+.card-item { display: grid; gap: 8px; min-width: 0; }
+.card-thumb { display: block; width: 100%; padding: 0; margin: 0; border: 0; background: none; border-radius: 4.5%; cursor: pointer; aspect-ratio: 750 / 1050; transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.card-thumb img { display: block; width: 100%; height: 100%; border-radius: 4.5%; }
+.card-thumb:hover { transform: translateY(-6px) scale(1.05); box-shadow: 0 0 0 2px var(--accent), 0 14px 30px rgba(0,0,0,.6), 0 0 22px rgba(135,147,255,.45); filter: brightness(1.06); }
+.card-thumb:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.card-thumb.lifted { visibility: hidden; }
+.card-name { font-size: 13px; color: var(--muted); text-align: center; }
+
+/* enlarged card view */
+.zoom { position: fixed; inset: 0; z-index: 10; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+.zoom[hidden] { display: none; }
+.zoom-backdrop { position: absolute; inset: 0; background: rgba(5, 8, 12, .84); opacity: 0; transition: opacity .3s ease; }
+.zoom.open .zoom-backdrop { opacity: 1; }
+.zoom-card { position: fixed; margin: 0; padding: 0; border: 0; background: none; cursor: zoom-out; border-radius: 4.5%; box-shadow: 0 20px 60px rgba(0,0,0,.7), 0 0 40px rgba(135,147,255,.35); transition: left .38s cubic-bezier(.2,.8,.2,1), top .38s cubic-bezier(.2,.8,.2,1), width .38s cubic-bezier(.2,.8,.2,1), height .38s cubic-bezier(.2,.8,.2,1); }
+.zoom-card img { display: block; width: 100%; height: 100%; border-radius: 4.5%; }
+.zoom-card:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+
+.zoom-info { position: fixed; overflow-y: auto; background: var(--table); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 18px; opacity: 0; transition: opacity .2s ease; }
+.zoom.open .zoom-info { opacity: 1; transition: opacity .3s ease .22s; }
+.zoom-info h2 { font-size: 30px; line-height: 1.05; }
+.info-block { display: grid; gap: 8px; }
+.info-label { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.info-row { display: flex; gap: 14px; align-items: center; }
+.info-row > div { min-width: 0; }
+.info-row b { display: block; font-size: 17px; }
+.info-row p { margin: 2px 0 0; color: #c3cbd6; font-size: 14px; }
+.info-none { margin: 0; color: var(--muted); font-size: 14px; }
+.token { border-top: 1px solid var(--line); padding-top: 16px; gap: 8px; }
+.token-head { display: flex; align-items: center; gap: 10px; }
+.token-head b { font-size: 17px; }
+.token-chip { font-family: var(--f-mono); font-weight: 700; font-size: 12px; letter-spacing: .04em; padding: 3px 8px; border-radius: 6px; border: 1.5px solid currentColor; background: rgba(255,255,255,.05); }
+.token-text { margin: 0; color: var(--fg); font-size: 14px; }
+.token ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; color: #c3cbd6; font-size: 14px; }
+/* icons cropped from the card art, or a drawn fallback until a card with that icon is added */
+.badge-img { flex: none; display: block; border-radius: 50%; filter: drop-shadow(0 2px 5px rgba(0,0,0,.5)); }
+.badge-img.role { width: 64px; height: 64px; }
+.badge-img.style { width: 48px; height: 48px; margin-inline: 8px; }
+.badge { flex: none; display: grid; place-items: center; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+.badge svg { width: 64%; height: 64%; display: block; }
+.badge.role { width: 64px; height: 64px; }
+.badge.style { width: 48px; height: 48px; margin-inline: 8px; }
+
+/* card picking stage: a full-screen glowing gradient that changes color with the step */
+.stage { position: fixed; inset: 0; z-index: 5; overflow-y: auto; background: #070a14; color: #fff;
+  padding-top: max(16px, env(safe-area-inset-top, 0px)); padding-bottom: max(28px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bg { position: fixed; inset: 0; z-index: 0; opacity: 0; pointer-events: none; transition: opacity .9s ease;
+  background-size: 160% 160%, 160% 160%, 100% 100%; background-repeat: no-repeat;
+  animation: drift 16s ease-in-out infinite alternate, glow 7s ease-in-out infinite alternate; }
+.bg-p1 { background-image: radial-gradient(circle at 30% 30%, rgba(76,96,255,.95), transparent 55%), radial-gradient(circle at 70% 70%, rgba(170,70,255,.85), transparent 55%), radial-gradient(circle at 50% 50%, #1c1560, #070618 85%); }
+.bg-p2 { background-image: radial-gradient(circle at 30% 30%, rgba(255,50,60,.95), transparent 55%), radial-gradient(circle at 75% 70%, rgba(255,128,30,.7), transparent 50%), radial-gradient(circle at 50% 50%, #3a0a10, #12040a 85%); }
+.bg-ban { background-image: radial-gradient(circle at 30% 30%, rgba(20,225,150,.9), transparent 55%), radial-gradient(circle at 70% 70%, rgba(25,190,240,.9), transparent 55%), radial-gradient(circle at 50% 50%, #06303a, #031318 85%); }
+.bg-done { background-image: radial-gradient(circle at 25% 50%, rgba(76,96,255,.85), transparent 55%), radial-gradient(circle at 75% 50%, rgba(255,60,70,.8), transparent 55%), radial-gradient(circle at 50% 50%, #1a1030, #06060f 85%); }
+.stage[data-mode="p1"] .bg-p1, .stage[data-mode="p2"] .bg-p2, .stage[data-mode="ban"] .bg-ban, .stage[data-mode="done"] .bg-done { opacity: 1; }
+@keyframes drift { from { background-position: 0% 0%, 100% 100%, 0 0; } to { background-position: 100% 100%, 0% 0%, 0 0; } }
+@keyframes glow { from { filter: brightness(.95); } to { filter: brightness(1.2); } }
+
+.stage-inner { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; display: grid; gap: 18px; justify-items: center; }
+.stage .btn.ghost { background: rgba(5,8,18,.5); border-color: rgba(255,255,255,.35); color: #fff; }
+.d-top { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.d-phase { font-family: var(--f-mono); text-transform: uppercase; letter-spacing: .14em; font-size: 12px; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+.d-banner { width: 100%; background: rgba(5,8,18,.58); border: 1px solid rgba(255,255,255,.18); border-radius: 16px; padding: 18px 20px; text-align: center; display: grid; gap: 8px; justify-items: center; backdrop-filter: blur(8px); }
+.d-player { font-family: var(--f-title); letter-spacing: .08em; text-transform: uppercase; font-size: 15px; padding: 3px 16px; border-radius: 999px; border: 2px solid #fff; }
+.d-player.p1 { background: #3f63ff; }
+.d-player.p2 { background: #e63a3a; }
+.d-action { font-size: clamp(32px, 7vw, 52px); line-height: 1; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
+.d-step { margin: 0; font-family: var(--f-mono); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.88); }
+.d-hint { margin: 0; font-size: 14px; color: rgba(255,255,255,.82); max-width: 52ch; }
+
+.d-teams { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.team { background: rgba(5,8,18,.5); border: 1px solid; border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; justify-content: center; gap: 8px 12px; flex-wrap: wrap; }
+.team.p1 { border-color: rgba(120,150,255,.85); }
+.team.p2 { border-color: rgba(255,120,120,.85); }
+.team-name { font-family: var(--f-title); text-transform: uppercase; letter-spacing: .06em; font-size: 15px; }
+.slots { display: flex; gap: 10px; }
+.slot { position: relative; width: 46px; height: 46px; border-radius: 50%; border: 2px dashed rgba(255,255,255,.38); display: grid; place-items: center; font-family: var(--f-mono); font-weight: 700; font-size: 14px; color: rgba(255,255,255,.55); }
+.slot.filled { border-style: solid; border-color: #fff; color: #fff; }
+.slot img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; display: block; }
+.slot.filled b { position: absolute; right: -7px; bottom: -7px; width: 21px; height: 21px; border-radius: 50%; border: 2px solid #fff; display: grid; place-items: center; font-size: 12px; color: #fff; }
+.team.p1 .slot.filled b { background: #3f63ff; }
+.team.p2 .slot.filled b { background: #e63a3a; }
+
+.d-grid { --tk: clamp(68px, 18vw, 104px); display: flex; flex-wrap: wrap; justify-content: center; gap: 22px 16px; width: 100%; padding-bottom: 8px; }
+.token { width: var(--tk); padding: 0; border: 0; background: none; color: #fff; font: inherit; display: grid; gap: 7px; justify-items: center; align-content: start; cursor: pointer; transition: filter .35s ease; }
+.token:focus-visible { outline: 3px solid #fff; outline-offset: 4px; border-radius: 12px; }
+.tk-disc { position: relative; width: var(--tk); height: var(--tk); border-radius: 50%; border: 3px solid rgba(255,255,255,.85); box-shadow: 0 6px 18px rgba(0,0,0,.5); transition: transform .15s ease, box-shadow .15s ease; }
+.tk-disc img { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.token.free:hover .tk-disc, .token.free:focus-visible .tk-disc { transform: scale(1.1); box-shadow: 0 0 0 3px rgba(255,255,255,.55), 0 0 26px rgba(255,255,255,.55); }
+.tk-name { font-size: 12px; line-height: 1.15; text-align: center; text-shadow: 0 1px 6px rgba(0,0,0,.85); max-width: calc(var(--tk) + 16px); }
+.token.banned { filter: brightness(.28); cursor: not-allowed; }
+.token.drafted, .token.locked { cursor: default; }
+.token.drafted.p1 .tk-disc { border-color: #8fa6ff; box-shadow: 0 0 0 2px #3f63ff, 0 0 22px rgba(80,110,255,.8); }
+.token.drafted.p2 .tk-disc { border-color: #ff9a9a; box-shadow: 0 0 0 2px #e63a3a, 0 0 22px rgba(255,80,80,.8); }
+.pick { position: absolute; left: 50%; top: 50%; width: 48%; height: 48%; transform: translate(-50%, -50%); border-radius: 50%; display: grid; place-items: center; font-family: var(--f-title); font-size: calc(var(--tk) * .27); line-height: 1; border: 3px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,.65); animation: pop .3s ease; }
+.pick.p1 { background: radial-gradient(circle at 35% 30%, #94aaff, #2e4fe0 70%); }
+.pick.p2 { background: radial-gradient(circle at 35% 30%, #ff9f9f, #d92d2d 70%); }
+@keyframes pop { from { transform: translate(-50%, -50%) scale(.3); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+
+.peek { position: fixed; z-index: 8; pointer-events: none; opacity: .9; border-radius: 4.5%; box-shadow: 0 18px 50px rgba(0,0,0,.7); }
+.confirm { position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(4,6,14,.8);
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.confirm-card { width: min(74vw, 300px); border-radius: 4.5%; opacity: .94; box-shadow: 0 18px 50px rgba(0,0,0,.7); }
+.c-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* battle screen: Player 2 on the top half, Player 1 on the bottom half, roll / turn panel on the seam */
+.arena { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; color: #fff; overflow: hidden;
+  background: radial-gradient(ellipse 70% 45% at 50% 50%, #251a52 0%, transparent 70%), linear-gradient(180deg, #0a0614 0%, #11092a 38%, #14103a 50%, #0b1230 62%, #060a18 100%); }
+.arena::before, .arena::after { content: ''; position: absolute; inset: -20%; pointer-events: none; z-index: 0; }
+.arena::before { background: radial-gradient(circle at 18% 22%, rgba(214,64,96,.20), transparent 38%), radial-gradient(circle at 82% 30%, rgba(122,60,220,.28), transparent 40%); animation: mat-a 24s ease-in-out infinite alternate; }
+.arena::after { background: radial-gradient(circle at 80% 78%, rgba(60,110,255,.24), transparent 38%), radial-gradient(circle at 22% 70%, rgba(30,190,200,.14), transparent 40%); animation: mat-b 30s ease-in-out infinite alternate; }
+@keyframes mat-a { from { transform: translate3d(-3%, -2%, 0) scale(1); } to { transform: translate3d(4%, 3%, 0) scale(1.1); } }
+@keyframes mat-b { from { transform: translate3d(3%, 2%, 0) scale(1.05); } to { transform: translate3d(-4%, -3%, 0) scale(1); } }
+.half { position: relative; z-index: 1; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); background: none; transition: box-shadow .4s ease, background .4s ease; }
+.half.p2 { padding-top: max(46px, calc(env(safe-area-inset-top, 0px) + 40px)); padding-bottom: 78px; }
+.half.p1 { padding-top: 78px; padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)); }
+.arena .seam-line { position: absolute; z-index: 2; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-1px); pointer-events: none; background: linear-gradient(90deg, transparent, rgba(255,120,140,.7), rgba(255,255,255,.75) 50%, rgba(110,140,255,.7), transparent); box-shadow: 0 0 18px rgba(170,130,255,.55); }
+.half.lit { background: radial-gradient(ellipse 80% 70% at 50% 50%, rgba(255,255,255,.07), transparent 70%); box-shadow: inset 0 0 0 2px rgba(255,255,255,.55), inset 0 0 60px rgba(255,255,255,.10); }
+.half-head { display: flex; align-items: center; gap: 10px; }
+.half.p1 .half-head { order: 2; }
+.first-badge { font-family: var(--f-title); text-transform: uppercase; letter-spacing: .06em; font-size: 13px; background: #fff; color: #111; padding: 2px 11px; border-radius: 999px; animation: badge-in .35s ease; }
+@keyframes badge-in { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.arena-menu { position: absolute; z-index: 6; top: max(10px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); padding: 6px 12px; min-height: 0; font-size: 13px; }
+.arena .btn.ghost { background: rgba(5,8,18,.55); border-color: rgba(255,255,255,.35); color: #fff; }
+
+/* hands: a card with its CET tokens tucked out from underneath it */
+.hand-row { --bw: max(60px, min((100vw - 40px) / 3, (50vh - 186px) * .7143, 320px)); --td: clamp(20px, calc(var(--bw) * .25), 34px); display: flex; gap: clamp(8px, 2vw, 18px); justify-content: center; align-items: flex-start; }
+.b-slot { width: var(--bw); display: grid; grid-template-columns: minmax(0, 1fr); }
+.b-card { position: relative; z-index: 1; width: 100%; aspect-ratio: 750 / 1050; padding: 0; margin: 0; border: 0; background: none; border-radius: 4.5%; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,.6); transition: transform .15s ease; }
+.b-card img { display: block; width: 100%; height: 100%; border-radius: 4.5%; }
+.b-card:hover, .b-card:focus-visible { transform: translateY(-4px); }
+.b-card:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.b-card.lifted { visibility: hidden; }
+.b-cet { position: relative; z-index: 0; display: flex; align-items: flex-end; min-height: var(--td); margin-top: calc(var(--td) * -.4); padding-left: 3px; min-width: 0; }
+.cet-disc { flex: none; display: block; width: var(--td); height: var(--td); border-radius: 50%; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+.cet-disc + .cet-disc { margin-left: calc(var(--td) * var(--ov, -.5)); }
+.cet-count { position: relative; z-index: 2; margin-left: 4px; font-family: var(--f-mono); font-weight: 700; font-size: clamp(9px, calc(var(--bw) * .07), 11px); line-height: 1; padding: 3px 5px; border-radius: 999px; background: rgba(5,8,18,.82); border: 1px solid rgba(135,200,255,.6); color: #bfe4ff; white-space: nowrap; }
+
+/* seam panel: roll-off, then turn controls */
+.seam-panel { position: absolute; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); background: rgba(6,8,22,.92); border: 1px solid rgba(255,255,255,.28); border-radius: 14px; padding: 8px 14px 10px; text-align: center; display: grid; gap: 8px; backdrop-filter: blur(8px); box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+.seam-label { font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.7); }
+.seam-msg { margin: 0; font-size: 14px; min-height: 2.8em; display: grid; place-items: center; }
+.roll-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; }
+.roll-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.die-name { font-family: var(--f-title); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+.roll-side.p1 .die-name { color: #a9b9ff; }
+.roll-side.p2 .die-name { color: #ffadad; }
+.roll-num { min-width: 64px; font-family: var(--f-title); font-size: 44px; line-height: 1.1; padding: 2px 10px; border-radius: 12px; border: 2px solid; background: rgba(255,255,255,.06); transition: background .3s ease, color .3s ease; }
+.roll-side.p1 .roll-num { border-color: #3f63ff; color: #c4d0ff; }
+.roll-side.p2 .roll-num { border-color: #e63a3a; color: #ffc6c6; }
+.roll-num.empty { opacity: .4; }
+.roll-num.win { background: #fff; color: #111; }
+.die { width: 76px; height: 76px; border-radius: 16px; border: 0; background: #f5f5fa; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); place-items: center; padding: 11px; font: inherit; cursor: pointer; transition: transform .12s ease; box-shadow: 0 0 0 3px #fff; }
+.die i { width: 12px; height: 12px; border-radius: 50%; }
+.die i.on { background: #15151f; }
+.die.blank { font-family: var(--f-title); font-size: 40px; color: #6d6d85; padding: 0; }
+.die:disabled { cursor: default; }
+.die:not(:disabled):hover { transform: scale(1.08); }
+.die:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+.die.w1 { box-shadow: 0 0 0 3px #3f63ff, 0 0 22px rgba(80,110,255,.85); }
+.die.w2 { box-shadow: 0 0 0 3px #e63a3a, 0 0 22px rgba(255,80,80,.85); }
+.die.ready { animation: nudge 1.3s ease-in-out infinite; }
+.die.rolling { animation: tumble .28s linear infinite; }
+@keyframes nudge { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+@keyframes tumble { 0% { transform: rotate(-14deg) translateY(0); } 50% { transform: rotate(12deg) translateY(-6px); } 100% { transform: rotate(-14deg) translateY(0); } }
+.turn-row { display: flex; align-items: center; justify-content: center; gap: 12px 16px; flex-wrap: wrap; }
+.acts { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-title); font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
+.acts-n { font-size: 34px; line-height: 1; color: #ffd24a; margin-right: 2px; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
+.acts-n small { font-size: 18px; color: rgba(255,255,255,.7); }
+.act { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); }
+.act.on { background: #ffd24a; border-color: #ffd24a; box-shadow: 0 0 10px rgba(255,210,74,.7); }
+.acts .acts-l { margin-left: 4px; }
+
+/* open card: the card moves to the center, its CET tokens slide out on the right, the options sit on the left */
+.bz { position: fixed; inset: 0; z-index: 12; }
+.bz[hidden] { display: none; }
+.bz-backdrop { position: absolute; inset: 0; z-index: 0; background: rgba(5,8,12,.86); opacity: 0; transition: opacity .3s ease; }
+.bz.open .bz-backdrop { opacity: 1; }
+.bz-card { position: fixed; z-index: 2; margin: 0; padding: 0; border: 0; background: none; cursor: zoom-out; border-radius: 4.5%; box-shadow: 0 20px 60px rgba(0,0,0,.7), 0 0 40px rgba(135,147,255,.35); transition: left .38s cubic-bezier(.2,.8,.2,1), top .38s cubic-bezier(.2,.8,.2,1), width .38s cubic-bezier(.2,.8,.2,1), height .38s cubic-bezier(.2,.8,.2,1); }
+.bz-card img { display: block; width: 100%; height: 100%; border-radius: 4.5%; }
+.bz-card:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+.bz-cet { position: fixed; z-index: 1; padding-left: 28px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; align-content: flex-start; overflow-y: auto; opacity: 0; transform: translateX(-70px); transition: opacity .3s ease .15s, transform .38s cubic-bezier(.2,.8,.2,1) .15s; }
+.bz.open .bz-cet { opacity: 1; transform: none; }
+.bz-cet-head { display: flex; align-items: baseline; gap: 8px; }
+.bz-cet-label { font-family: var(--f-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #9fd2ff; }
+.bz-cet-n { font-family: var(--f-title); font-size: 44px; line-height: 1; color: #fff; }
+.bz-discs { display: grid; grid-template-columns: repeat(auto-fill, 38px); gap: 6px; width: 100%; max-width: 132px; }
+.bz-cet.compact .bz-discs { grid-template-columns: repeat(auto-fill, 32px); max-width: none; }
+.bz-disc { width: 100%; aspect-ratio: 1; display: block; border-radius: 50%; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+.bz-none { font-size: 13px; color: #8c98a8; }
+.bz-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bz-opts { position: fixed; z-index: 3; overflow-y: auto; background: var(--table); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; opacity: 0; transition: opacity .2s ease; }
+.bz.open .bz-opts { opacity: 1; transition: opacity .3s ease .2s; }
+.bz-head { display: grid; gap: 6px; justify-items: start; }
+.bz-head h2 { font-size: 26px; line-height: 1.05; }
+.bz-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.opt-list { display: grid; gap: 8px; }
+.bz-opts.compact .opt-list { grid-template-columns: 1fr 1fr; }
+.opt { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; width: 100%; min-height: 52px; padding: 9px 12px; text-align: left; font: inherit; color: #fff; background: #1d2e40; border: 1px solid #3e5670; border-radius: 10px; cursor: pointer; }
+.opt:hover:not(:disabled) { background: #26405a; border-color: var(--accent); }
+.opt:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.opt-label { font-weight: 700; font-size: 15px; }
+.opt-cost { font-family: var(--f-mono); font-weight: 700; font-size: 13px; color: #8ad4ff; }
+.opt-sub { grid-column: 1 / -1; font-size: 12.5px; color: #b9c4d2; }
+.opt-why { grid-column: 1 / -1; font-size: 12px; color: #ffb4a6; }
+.opt:disabled { cursor: not-allowed; background: #0a0f15; border-color: #17212c; }
+.opt:disabled .opt-label { color: #5f6c7a; }
+.opt:disabled .opt-cost { color: #3f5d70; }
+.opt:disabled .opt-sub { color: #4d5967; }
+.opt:disabled .opt-why { color: #d79a8f; }
+.bz-close { align-self: flex-start; }
+
+/* bold HP plate on each card, floating numbers, targets, domain banner */
+.b-slot { position: relative; }
+.b-hp { position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); z-index: 2; display: grid; gap: 2px; min-width: 58%; white-space: nowrap; padding: 1px 7px 3px; border-radius: 12px; background: rgba(5,8,18,.9); border: 2px solid #fff; text-align: center; pointer-events: none; box-shadow: 0 3px 10px rgba(0,0,0,.6); }
+.b-hp b { font-family: var(--f-title); font-weight: 400; font-size: clamp(12px, calc(var(--bw) * .115), 22px); line-height: 1.1; letter-spacing: .04em; color: #fff; text-shadow: 0 1px 0 #000; }
+.b-hp .bar { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
+.b-hp .bar i { display: block; height: 100%; border-radius: 3px; background: #4ade80; transition: width .4s ease; }
+.b-hp.mid .bar i { background: #fbbf24; }
+.b-hp.low .bar i { background: #f43f5e; }
+.b-card.dead img { filter: grayscale(1) brightness(.35); }
+.b-card.dead { cursor: default; }
+.b-card.target { animation: tgt .9s ease-in-out infinite; outline: 3px solid #ffe066; outline-offset: 3px; }
+@keyframes tgt { 0%, 100% { box-shadow: 0 0 6px 1px rgba(255,224,102,.55); } 50% { box-shadow: 0 0 26px 8px rgba(255,224,102,.95); } }
+.tt-badge { position: absolute; z-index: 3; top: 3%; left: 3%; font-family: var(--f-mono); font-weight: 700; font-size: clamp(10px, calc(var(--bw) * .1), 15px); line-height: 1; padding: 3px 7px; border-radius: 999px; background: rgba(40,10,80,.92); border: 2px solid #b88aff; color: #e4d2ff; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.6); }
+.tt-badge.grace { border-color: #ffd24a; color: #ffe9a0; }
+.pop { position: absolute; z-index: 5; left: 50%; top: 18%; transform: translateX(-50%); pointer-events: none; font-family: var(--f-title); font-size: clamp(20px, calc(var(--bw) * .22), 40px); white-space: nowrap; color: #fff; text-shadow: 0 2px 0 #000, 0 0 12px rgba(0,0,0,.8); animation: pop 1.3s ease-out forwards; }
+.pop.dmg { color: #ff5a5a; } .pop.heal { color: #6dffa0; } .pop.cet { color: #8ad4ff; } .pop.blk { color: #ffe066; } .pop.ko { color: #fff; }
+@keyframes pop { 0% { opacity: 0; transform: translate(-50%, 14px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.25); } 30% { transform: translate(-50%, -4px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -46px) scale(1); } }
+.half.dom { box-shadow: inset 0 0 0 3px rgba(190,120,255,.95), inset 0 0 70px rgba(170,90,255,.45); }
+.half.lit.dom { box-shadow: inset 0 0 0 3px #fff, inset 0 0 70px rgba(170,90,255,.55); }
+.dom-banner { position: absolute; z-index: 6; top: max(12px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); white-space: nowrap; max-width: calc(100% - 150px); overflow: hidden; text-overflow: ellipsis; font-family: var(--f-title); font-size: 15px; letter-spacing: .04em; padding: 4px 12px; border-radius: 999px; justify-self: center; background: linear-gradient(90deg, #6d28d9, #c026d3); color: #fff; }
+.dom-banner b { font-weight: 400; opacity: .8; margin-right: 4px; }
+.seam-panel.mini { gap: 4px; padding: 6px 12px 7px; width: min(520px, calc(100% - 24px)); }
+.seam-panel.mini .turn-row { gap: 6px 12px; }
+.seam-panel.mini .acts .acts-l { display: none; }
+.seam-panel.mini .d-player { font-size: 14px; padding: 3px 12px; }
+.seam-panel.mini .acts-n { font-size: 26px; }
+.seam-panel.mini .act { width: 16px; height: 16px; }
+.seam-panel.mini .btn { padding: 6px 14px; min-height: 0; }
+.seam-msg.mini { min-height: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 13px; line-height: 1.3; color: rgba(255,255,255,.88); }
+.log-btn { background: none; border: 1px solid rgba(255,255,255,.3); color: rgba(255,255,255,.8); border-radius: 999px; font: 700 11px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: 4px 10px; cursor: pointer; }
+.log-pop { position: absolute; z-index: 7; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); width: min(520px, calc(100% - 24px)); max-height: 40%; overflow-y: auto; background: rgba(6,8,22,.97); border: 1px solid rgba(255,255,255,.3); border-radius: 12px; padding: 10px 14px; display: grid; gap: 8px; font-size: 13px; box-shadow: 0 10px 40px rgba(0,0,0,.7); }
+.log-pop p { margin: 0; color: rgba(255,255,255,.85); } .log-pop p:first-child { color: #fff; }
+
+/* simple card animations: the card that acts steps toward the enemy, a hit one shakes and flashes, a healed one glows */
+.fx-act { animation: fx-act .6s ease-out both; }
+.half.p2 .fx-act { --dir: 1; } .half.p1 .fx-act { --dir: -1; }
+@keyframes fx-act { 0% { transform: translateY(0) scale(1); } 30% { transform: translateY(calc(var(--dir, -1) * 22px)) scale(1.07); filter: brightness(1.25); } 100% { transform: translateY(0) scale(1); filter: none; } }
+.fx-hurt .b-card { animation: fx-hurt .5s ease-out both; }
+@keyframes fx-hurt { 0%, 100% { transform: translateX(0); filter: none; } 15% { transform: translateX(-8px); filter: brightness(1.7) saturate(1.5) drop-shadow(0 0 10px #ff3b4a); } 35% { transform: translateX(8px); } 55% { transform: translateX(-5px); filter: brightness(1.3) drop-shadow(0 0 8px #ff3b4a); } 75% { transform: translateX(3px); } }
+.fx-heal .b-card { animation: fx-heal .8s ease-out both; }
+@keyframes fx-heal { 0%, 100% { filter: none; } 35% { filter: brightness(1.25) drop-shadow(0 0 14px #5dffa0) drop-shadow(0 0 26px #5dffa0); } }
+.fx-cet .b-card { animation: fx-cet .7s ease-out both; }
+@keyframes fx-cet { 0%, 100% { filter: none; transform: scale(1); } 35% { filter: drop-shadow(0 0 12px #8ad4ff) drop-shadow(0 0 22px #8ad4ff); transform: scale(1.05); } }
+.fx-blk .b-card { animation: fx-cet .7s ease-out both; }
+.fx-ko .b-card { animation: fx-hurt .6s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .fx-act, .fx-hurt .b-card, .fx-heal .b-card, .fx-cet .b-card, .fx-blk .b-card, .fx-ko .b-card, .arena::before, .arena::after { animation: none; } }
+
+/* end of the battle */
+.end { position: absolute; inset: 0; z-index: 9; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at 50% 40%, rgba(40,24,90,.82), rgba(3,4,12,.95) 75%); animation: end-in .7s ease .5s both; overflow-y: auto; }
+@keyframes end-in { from { opacity: 0; } to { opacity: 1; } }
+.end-box { width: min(620px, 100%); display: grid; gap: 14px; justify-items: center; text-align: center; }
+.end-kicker { font-family: var(--f-mono); font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: rgba(255,255,255,.65); }
+.end-h { margin: 0; font-family: var(--f-title); font-weight: 400; font-size: clamp(38px, 9vw, 88px); line-height: 1.05; letter-spacing: .03em; text-transform: uppercase; }
+.end-h.won { color: #ffd24a; text-shadow: 0 0 34px rgba(255,200,60,.55), 0 4px 0 rgba(0,0,0,.5); }
+.end-h.lost { color: #9aa3c4; text-shadow: 0 4px 0 rgba(0,0,0,.5); }
+.end-h.p1 { color: #a9b9ff; } .end-h.p2 { color: #ffadad; }
+.end-teams { display: grid; gap: 8px; width: 100%; }
+.end-team { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.end-team .tn { font-family: var(--f-title); letter-spacing: .06em; text-transform: uppercase; font-size: 15px; min-width: 90px; }
+.end-team .tn.p1 { color: #a9b9ff; } .end-team .tn.p2 { color: #ffadad; }
+.end-chip { display: grid; justify-items: center; gap: 2px; font: 700 11px var(--f-mono); color: #cdd6e6; }
+.end-chip img { width: 54px; height: 54px; border-radius: 50%; border: 2px solid #fff; }
+.end-chip.dead img { filter: grayscale(1) brightness(.5); border-color: #555; }
+.end-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+.opt-fx { grid-column: 1 / -1; font-size: 12.5px; color: #ffd9a8; }
+.opt:disabled .opt-fx { color: #6b5a47; }
+.bz-hp { font-family: var(--f-title); font-size: 22px; color: #fff; letter-spacing: .03em; }
+.bz-hp b { font-weight: 400; font-size: 30px; }
+.bz-act { font-family: var(--f-title); font-size: 18px; color: #ffd24a; }
+.bz-act b { font-weight: 400; font-size: 26px; }
+
+/* dice rolls for moves, coin flip, secret picks */
+.roll-need { font-family: var(--f-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.75); min-height: 1.3em; }
+.roll-num.fail { background: rgba(255,80,80,.25); color: #ffb4b4; border-color: #ff5a5a; }
+.dice-panel .seam-label { font-size: 12px; letter-spacing: .08em; line-height: 1.35; }
+.pick-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.coin-wrap { display: grid; place-items: center; padding: 6px 0; perspective: 500px; }
+.coin { width: 92px; height: 92px; border-radius: 50%; border: 5px solid #ffe28a; background: radial-gradient(circle at 35% 30%, #fff2b8, #d9a520 70%); color: #3a2a00; font-family: var(--f-title); font-size: 32px; display: grid; place-items: center; cursor: pointer; box-shadow: 0 0 22px rgba(255,210,74,.6); padding: 0; }
+.coin span { font-size: 24px; letter-spacing: .06em; text-transform: uppercase; }
+.coin:disabled { cursor: default; }
+.coin.flipping { animation: flip 1.2s ease-in-out; }
+.coin.f1 { background: radial-gradient(circle at 35% 30%, #9db1ff, #3f63ff 70%); border-color: #c4d0ff; color: #fff; box-shadow: 0 0 26px rgba(80,110,255,.9); }
+.coin.f2 { background: radial-gradient(circle at 35% 30%, #ffb0b0, #e63a3a 70%); border-color: #ffc6c6; color: #fff; box-shadow: 0 0 26px rgba(255,80,80,.9); }
+@keyframes flip { 0% { transform: rotateY(0) translateY(0); } 50% { transform: rotateY(1440deg) translateY(-34px); } 100% { transform: rotateY(2880deg) translateY(0); } }
+.b-card.chosen { outline: 4px solid #6dffa0; outline-offset: 3px; box-shadow: 0 0 28px 8px rgba(109,255,160,.8); }
+.b-card.conf img { filter: grayscale(.7) brightness(.5); }
+
+/* floating options beside the open card: the descriptions show on hover */
+.opt-tip { display: none; }
+.opt-wrap { display: block; }
+.opt-wrap.off { cursor: not-allowed; }
+.opt:disabled { pointer-events: none; }
+.bz-opts.float { background: none; border: 0; padding: 4px; overflow: visible; }
+.bz-opts.float .bz-head h2 { text-shadow: 0 2px 14px #000; }
+.bz-opts.float .bz-meta { color: #dfe8f3; }
+.bz-opts.float .opt-list { gap: 11px; }
+.bz-opts.float .opt { min-height: 50px; padding: 8px 20px; border-radius: 999px; background: rgba(18,30,46,.88); border: 2px solid rgba(140,195,255,.55); box-shadow: 0 6px 20px rgba(0,0,0,.55), 0 0 16px rgba(110,170,255,.25); transition: transform .14s ease, box-shadow .14s ease, background .14s ease; }
+.bz-opts.float .opt:hover:not(:disabled), .bz-opts.float .opt:focus-visible { transform: translateX(10px); background: rgba(36,64,96,.95); border-color: #bfe0ff; box-shadow: 0 8px 24px rgba(0,0,0,.6), 0 0 24px rgba(130,190,255,.6); }
+.bz-opts.float .opt:disabled { background: rgba(8,12,18,.78); border-color: rgba(70,85,100,.5); box-shadow: none; }
+.bz-opts.float .opt-sub, .bz-opts.float .opt-fx, .bz-opts.float .opt-why { display: none; }
+.bz-opts.float .opt-tip { display: grid; gap: 4px; align-content: start; margin-top: 4px; min-height: 132px; padding: 12px 14px; border-radius: 14px; background: rgba(5,8,14,.92); border: 1px solid rgba(140,195,255,.35); box-shadow: 0 8px 26px rgba(0,0,0,.6); }
+.tip-h { font-size: 16px; color: #fff; }
+.tip-cost { font-family: var(--f-mono); font-size: 12px; color: #8ad4ff; margin-left: 6px; }
+.tip-sub { font-size: 13px; color: #c3cfdd; }
+.tip-fx { font-size: 13px; color: #ffd9a8; }
+.tip-why { font-size: 13px; color: #ff9d8c; }
+.tip-ok { font-size: 13px; color: #7dffb0; }
+
+/* full-screen domain rules */
+.info-ov { position: fixed; inset: 0; z-index: 30; overflow-y: auto; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(circle at 50% 30%, rgba(120,60,220,.55), rgba(8,4,24,0) 70%), #08041a; animation: infoin .45s ease; }
+.info-ov.p1 { background: radial-gradient(circle at 50% 25%, rgba(70,90,255,.55), rgba(5,6,26,0) 72%), #05061c; }
+.info-ov.p2 { background: radial-gradient(circle at 50% 25%, rgba(255,70,70,.5), rgba(24,5,8,0) 72%), #180508; }
+@keyframes infoin { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+.info-box { width: min(980px, 100%); display: grid; gap: 10px; justify-items: center; text-align: center; }
+.info-box h2 { font-family: var(--f-title); font-weight: 400; font-size: clamp(38px, 7vw, 76px); line-height: 1; letter-spacing: .03em; text-transform: uppercase; text-shadow: 0 4px 0 rgba(0,0,0,.5), 0 0 30px rgba(190,140,255,.8); }
+.info-who { font-family: var(--f-mono); letter-spacing: .14em; text-transform: uppercase; font-size: 13px; color: rgba(255,255,255,.75); }
+.info-lead { font-size: clamp(17px, 2.4vw, 24px); font-weight: 700; color: #ffe28a; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; width: 100%; margin-top: 8px; text-align: left; }
+.info-grid section { background: rgba(5,8,18,.7); border: 1px solid rgba(255,255,255,.22); border-radius: 14px; padding: 14px 16px; }
+.info-grid h3 { font-family: var(--f-title); font-weight: 400; letter-spacing: .06em; text-transform: uppercase; font-size: 18px; color: #c9b6ff; margin-bottom: 6px; }
+.info-grid ul { list-style: none; display: grid; gap: 8px; padding: 0; margin: 0; }
+.info-grid li { font-size: 15px; line-height: 1.4; color: #eef1f7; padding-left: 14px; position: relative; }
+.info-grid li::before { content: ''; position: absolute; left: 0; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: #ffd24a; }
+.info-foot { display: grid; gap: 8px; justify-items: center; margin-top: 10px; min-height: 64px; }
+.info-foot .btn:disabled { opacity: .55; cursor: wait; }
+.info-bar { width: 220px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.2); position: relative; overflow: hidden; }
+.info-bar::after { content: ''; position: absolute; inset: 0; background: #ffd24a; transform-origin: left; animation: infobar 3s linear forwards; }
+@keyframes infobar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* menu: username box and the Play drop-down */
+.menu-list .btn[hidden] { display: none; }
+.menu-list.rooms .drop { animation: drop-in .22s ease-out both; }
+.menu-list.rooms .drop:nth-of-type(5) { animation-delay: .05s; }
+.menu-list.rooms .drop:nth-of-type(6) { animation-delay: .1s; }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+.menu-note { min-height: 20px; margin: 0; max-width: 320px; font-size: 14px; color: #ffb59b; }
+.menu-note:empty { visibility: hidden; }
+.uname { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); display: grid; gap: 4px; text-align: left; z-index: 5; }
+.uname span { font-family: var(--f-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.field { font: inherit; font-size: 16px; color: var(--fg); background: var(--table); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; min-height: 44px; width: 220px; max-width: calc(100vw - 32px); }
+.field::placeholder { color: #5f6b7a; }
+.field:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+/* room screens */
+.room-screen { display: grid; justify-items: center; align-content: start; gap: 16px; text-align: center; padding-block: clamp(24px, 9vh, 80px) 24px; }
+.room-screen h2 { font-size: clamp(30px, 7vw, 46px); }
+.room-card { width: 100%; max-width: 420px; display: grid; gap: 12px; }
+.room-err { min-height: 20px; margin: 0; font-size: 14px; color: #ffb59b; }
+.room-err:empty { visibility: hidden; }
+.code-field { font-family: var(--f-mono); font-weight: 700; font-size: 30px; letter-spacing: .35em; text-align: center; padding-left: calc(12px + .35em); width: 100%; max-width: none; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.row .btn { flex: 1 1 140px; }
+.code-box { display: grid; gap: 6px; justify-items: center; }
+.code-box small { font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.code-big { font-family: var(--f-mono); font-weight: 700; font-size: clamp(38px, 11vw, 60px); letter-spacing: .22em; padding-left: .22em; line-height: 1.1; }
+.ls-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 560px; }
+.ls-slot { position: relative; display: grid; gap: 6px; padding: 16px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--table); min-width: 0; }
+.ls-slot.p1 { border-color: #5a63d8; box-shadow: inset 0 0 28px rgba(105,92,230,.22); }
+.ls-slot.p2 { border-color: #d8603c; box-shadow: inset 0 0 28px rgba(230,100,60,.2); }
+.ls-slot.empty { border-style: dashed; box-shadow: none; }
+.ls-role { font-family: var(--f-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.ls-name { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+.ls-slot.empty .ls-name { color: var(--muted); font-weight: 600; font-size: 16px; }
+.ls-conn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.ls-conn::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #5f6b7a; }
+.ls-conn.on { color: #8ff0b4; }
+.ls-conn.on::before { background: #4be08a; box-shadow: 0 0 8px #4be08a; }
+.ls-conn.off { color: #ffb59b; }
+.ls-conn.off::before { background: #ff7a4d; }
+.ls-conn.wait::before { animation: pulse 1.2s ease-in-out infinite; }
+.ls-you { color: var(--accent); font-weight: 700; }
+@keyframes pulse { 50% { opacity: .25; } }
+.ls-status { margin: 0; color: var(--muted); min-height: 22px; }
+.ls-actions { display: grid; gap: 10px; width: 100%; max-width: 320px; }
+.match-box { width: 100%; max-width: 480px; padding: 16px; display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--table); font-family: var(--f-mono); font-size: 13px; text-align: left; }
+.match-box b { color: var(--fg); }
+.match-warn { margin: 0; padding: 10px 14px; border-radius: 8px; border: 1px solid #ff7a4d; background: rgba(255,122,77,.12); color: #ffd2c2; }
+@media (max-width: 520px) { .ls-slots { grid-template-columns: 1fr; } }
+
+/* online match: connection warning and refusal toast */
+.net-bar { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 80; width: max-content; max-width: min(94vw, 560px); padding: 9px 16px; border-radius: 10px; text-align: center; background: #5a1f10; color: #ffd9cc; border: 1px solid #ff7a4d; font-weight: 600; font-size: 14px; pointer-events: none; box-shadow: 0 6px 22px rgba(0,0,0,.55); }
+.toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 90; max-width: min(92vw, 460px); padding: 10px 16px; border-radius: 10px; background: #1b2430; border: 1px solid var(--accent); color: var(--fg); box-shadow: 0 8px 28px rgba(0,0,0,.6); text-align: center; }
+.info-wait { font-size: 13px; color: var(--muted); }
+.coin button, .coin { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 520px) { .dom-banner { left: auto; right: 12px; transform: none; max-width: calc(100% - 150px); font-size: 13px; } .acts-n { font-size: 26px; } .acts { font-size: 12px; } .act { width: 18px; height: 18px; } .win-h { font-size: 30px; } .team { padding: 8px; } .slot { width: 40px; height: 40px; } .slots { gap: 8px; } .die { width: 64px; height: 64px; padding: 8px; } .die i { width: 10px; height: 10px; } .die.blank { font-size: 32px; } .roll-num { font-size: 34px; min-width: 48px; } .roll-row { gap: 8px; } .bz-opts { padding: 10px; } .opt { min-height: 48px; padding: 8px 10px; } .opt-label { font-size: 14px; } }
+@media (prefers-reduced-motion: reduce) { .zoom-card, .zoom-backdrop, .zoom-info, .card-thumb, .bg, .token, .tk-disc, .half, .b-card, .bz-card, .bz-backdrop, .bz-cet, .bz-opts { transition: none !important; } .bg, .pick, .half, .die.rolling, .die.ready, .first-badge { animation: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <section id="screen-menu" class="menu" aria-label="Main menu">
+    <h1 class="logo">Jujutsu Card Battle</h1>
+    <nav class="menu-list" id="menu-list" aria-label="Menu options">
+      <button type="button" class="btn big" id="m-play" aria-expanded="false">Play</button>
+      <button type="button" class="btn big alt" data-nav="cards">Card Info</button>
+      <button type="button" class="btn big alt" disabled aria-disabled="true">Tutorial <small>Coming soon</small></button>
+      <button type="button" class="btn big alt drop" id="m-local" hidden>Local Play</button>
+      <button type="button" class="btn big alt drop" id="m-create" hidden>Create Room</button>
+      <button type="button" class="btn big alt drop" id="m-join" hidden>Join Room</button>
+    </nav>
+    <p class="menu-note" id="menu-note" role="alert"></p>
+    <label class="uname"><span>Username</span><input id="username" class="field" maxlength="16" placeholder="Type a username" autocomplete="nickname" spellcheck="false"></label>
+  </section>
+
+  <section id="screen-play" class="stage" data-mode="p1" aria-label="Card picking" hidden>
+    <div class="bg bg-p1"></div>
+    <div class="bg bg-p2"></div>
+    <div class="bg bg-ban"></div>
+    <div class="bg bg-done"></div>
+    <div class="stage-inner" id="draft"></div>
+  </section>
+
+  <section id="screen-battle" class="arena" aria-label="Battle" hidden></section>
+
+  <section id="screen-cards" class="screen" hidden>
+    <header class="top">
+      <h1>Card Info</h1>
+      <button type="button" class="btn ghost" data-nav="menu">Main menu</button>
+    </header>
+    <div class="card-grid" id="card-grid" aria-label="Cards"></div>
+  </section>
+
+  <section id="screen-join" class="room-screen" aria-label="Join room" hidden>
+    <h2>Join Room</h2>
+    <form class="room-card" id="join-form" autocomplete="off">
+      <label for="join-code" class="ls-status">Enter the 6-digit room code from the host</label>
+      <input id="join-code" class="field code-field" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" aria-describedby="join-err">
+      <p class="room-err" id="join-err" role="alert"></p>
+      <div class="row">
+        <button type="submit" class="btn" id="join-go">Join</button>
+        <button type="button" class="btn alt" id="join-back">Back</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="screen-lobby" class="room-screen" aria-label="Lobby" hidden>
+    <h2>Lobby</h2>
+    <div class="code-box">
+      <small>Room code</small>
+      <div class="code-big" id="lobby-code" aria-live="polite">------</div>
+      <button type="button" class="btn ghost" id="lobby-copy">Copy code</button>
+    </div>
+    <div class="ls-slots" id="lobby-slots"></div>
+    <p class="ls-status" id="lobby-status" aria-live="polite"></p>
+    <p class="room-err" id="lobby-err" role="alert"></p>
+    <div class="ls-actions">
+      <button type="button" class="btn big" id="lobby-start" disabled>Start Match</button>
+      <button type="button" class="btn big alt" id="lobby-leave">Leave Room</button>
+    </div>
+  </section>
+
+  <section id="screen-match" class="room-screen" aria-label="Starting match" hidden>
+    <h2>Starting match…</h2>
+    <p class="ls-status" id="match-status">Connecting to the match.</p>
+    <div class="ls-actions"><button type="button" class="btn big alt" id="match-leave">Leave Match</button></div>
+  </section>
+
+</div>
+
+<div class="zoom" id="zoom" hidden>
+  <div class="zoom-backdrop" id="zoom-backdrop"></div>
+</div>
+
+<div class="bz" id="bz" hidden>
+  <div class="bz-backdrop" id="bz-backdrop"></div>
+</div>
+
+<img class="peek" id="peek" alt="" hidden>
+<div class="net-bar" id="net-bar" role="alert" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+</script>
+
+<script id="server-rooms">
+/* Online rooms: talks to the game server that served this page. The server keeps the rooms, runs the match
+   and decides everything. This file only sends requests (fetch POST) and listens for updates (Server-Sent Events). */
+(function (global) {
+  'use strict';
+  function cleanName(s) {
+    return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿<>&"']/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+  }
+  function isCode(s) { return /^\d{6}$/.test(String(s)); }
+  function post(path, body) {
+    return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .catch(function () {
+        var m = location.protocol === 'file:'
+          ? 'This page was opened as a file. Online play needs the game server: run start-windows.bat (or start-mac.command), then use the link it shows.'
+          : 'Could not reach the game server.';
+        return { ok: false, message: m, msg: m };
+      });
+  }
+  function create() {
+    var listeners = [], R = null, es = null;
+    function emit() { var v = view(); listeners.forEach(function (f) { try { f(v); } catch (e) { console.error(e); } }); }
+    function connect() {
+      var url = '/api/events?token=' + encodeURIComponent(R.token);
+      es = new EventSource(url);
+      es.addEventListener('view', function (e) { try { R.sv = JSON.parse(e.data); } catch (x) { return; } if (R.sv.closed) R.closed = R.sv.closed; emit(); });
+      es.addEventListener('state', function (e) {
+        var st; try { st = JSON.parse(e.data); } catch (x) { return; }
+        R.last = st; if (R.onState) R.onState(st);
+      });
+      es.onerror = function () {
+        if (!R) return;
+        if (es.readyState === 2) { if (!R.closed) R.closed = 'server'; emit(); }   // the server no longer knows this room
+      };
+    }
+    function start(res, role, name) {
+      if (!res.ok) return res;
+      leave();
+      R = { token: res.token, code: res.code, role: role, name: name, sv: null, closed: '', last: null, onState: null };
+      connect(); emit();
+      return { ok: true };
+    }
+    function leave() {
+      if (!R) return;
+      var o = R; R = null;
+      try { es && es.close(); } catch (e) {}
+      es = null;
+      try { navigator.sendBeacon ? navigator.sendBeacon('/api/leave', new Blob([JSON.stringify({ token: o.token })], { type: 'application/json' })) : post('/api/leave', { token: o.token }); } catch (e) {}
+    }
+    function view() {
+      if (!R) return null;
+      var sv = R.sv, host = R.role === 'host';
+      if (!sv) return { loading: true, code: R.code, role: R.role, closed: R.closed, players: [], match: null };
+      var h = sv.host || { name: null, connected: false }, g = sv.guest || { name: null, connected: false };
+      return {
+        code: R.code, role: R.role, closed: R.closed, opponentLeft: !!sv.left && sv.left !== (host ? 1 : 2),
+        canStart: host && !!sv.guest && g.connected && !sv.started,
+        match: sv.started ? { players: [{ name: h.name }, { name: g.name }] } : null,
+        players: [
+          { slot: 1, label: 'Host', name: h.name, connected: h.connected, isMe: host },
+          { slot: 2, label: 'Opponent', name: sv.guest ? g.name : null, connected: g.connected, isMe: !host }
+        ]
+      };
+    }
+    return {
+      cleanName: cleanName, isCode: isCode, view: view,
+      onChange: function (f) { listeners.push(f); },
+      createRoom: function (name) { return post('/api/create', { name: name }).then(function (r) { return start(r, 'host', name); }); },
+      joinRoom: function (code, name) { return post('/api/join', { code: code, name: name }).then(function (r) { return start(r, 'guest', name); }); },
+      startMatch: function () { return R ? post('/api/start', { token: R.token }) : Promise.resolve({ ok: false, message: 'No room.' }); },
+      leaveRoom: function () { leave(); return Promise.resolve(); },
+      channel: function () {
+        if (!R) return null;
+        var me = R;
+        return {
+          act: function (a) { return post('/api/act', { token: me.token, action: a }); },
+          onState: function (f) { me.onState = f; if (f && me.last) f(me.last); }
+        };
+      }
+    };
+  }
+  global.ServerRooms = { create: create };
+})(window);
+</script>
+
+<script>
+(function () {
+  var SCREENS = { menu: 'screen-menu', play: 'screen-play', battle: 'screen-battle', cards: 'screen-cards', join: 'screen-join', lobby: 'screen-lobby', match: 'screen-match' };
+  var currentScreen = 'menu';
+  function show(name) {
+    currentScreen = name;
+    Object.keys(SCREENS).forEach(function (k) {
+      document.getElementById(SCREENS[k]).hidden = (k !== name);
+    });
+    hidePeek();
+    resetBZ();
+    if (name === 'menu') { endSession(); leaveAll(); setPlayMenu(false); }
+    window.scrollTo(0, 0);
+  }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-nav]');
+    if (!b || b.disabled) return;
+    var to = b.getAttribute('data-nav');
+    if (to === 'play') startLocal(); else show(to);
+  });
+
+//@@CORE-A-BEGIN
+  /* ---------- roles and styles ---------- */
+  // img = icon cropped from the card art. Entries without img use a drawn icon
+  // (bg = badge color, fg = glyph color; the glyph uses currentColor and var(--ibg) for cut-outs).
+  var ROLES = {
+    control:    { name: 'Control', img: 'cards/icons/role-control.png',
+      text: 'Controls the pace of the battle. Restricts, exhausts or weakens enemies so they cannot use their best moves.' },
+    damage:     { name: 'Damage', img: 'cards/icons/role-damage.png',
+      text: 'Built to deal damage. Strong moves let this card execute enemies quickly.' },
+    tank:       { name: 'Tank', img: 'cards/icons/role-tank.png',
+      text: 'Built to take hits. High HP and abilities that soak up or deflect damage keep the team standing.' },
+    support:    { name: 'Support', img: 'cards/icons/role-support.png',
+      text: 'Keeps the team alive and strong by healing allies and boosting their HP or damage.' },
+    chaos:      { name: 'Chaos', img: 'cards/icons/role-chaos.png',
+      text: 'Disrupts the battle with dice rolls and rule-bending effects that are hard for the enemy to plan around.' },
+    specialist: { name: 'Specialist', bg: '#6cc4f0', fg: '#ffffff',
+      text: 'No set job. Has a more complex moveset with unique mechanics to learn.',
+      icon: '<path fill="currentColor" d="M5 9 h4 a2 2 0 1 1 4 0 h4 v4 a2 2 0 1 1 0 4 V20 H5 Z"/>' }
+  };
+
+  var STYLES = {
+    luck:       { name: 'Luck Based', img: 'cards/icons/style-luck.png',
+      text: 'Most or all of this card’s power depends on dice rolls. High risk, high reward.' },
+    burst:      { name: 'Burst', img: 'cards/icons/style-burst.png',
+      text: 'Deals a lot of damage in a short window, using a few powerful moves instead of a long fight.' },
+    sustained:  { name: 'Sustained', img: 'cards/icons/style-sustained.png',
+      text: 'Deals steady damage across many turns, often through effects like burning or poison.' },
+    scaling:    { name: 'Scaling', img: 'cards/icons/style-scaling.png',
+      text: 'Gets stronger the longer the battle goes on. Its damage or effects grow over time.' },
+    protector:  { name: 'Protector', img: 'cards/icons/style-protector.png',
+      text: 'Shields allies from harm, such as by preventing their execution or taking hits for them.' },
+    turn:       { name: 'Turn Based', img: 'cards/icons/style-turn.png',
+      text: 'Moves play out over several turns or start a timed sequence, so planning ahead matters.' },
+    absorbent:  { name: 'Absorbent', bg: '#a8841a', fg: '#ffffff',
+      text: 'Soaks up huge amounts of damage and keeps fighting.',
+      icon: '<rect x="3.5" y="7.5" width="17" height="10" rx="3" fill="currentColor"/><g fill="var(--ibg)"><circle cx="8" cy="11.5" r="1.3"/><circle cx="13" cy="13.7" r="1.7"/><circle cx="17" cy="10.8" r="1.1"/><circle cx="9.3" cy="15" r="0.9"/></g>' },
+    aggressive: { name: 'Aggressive', bg: '#6a3fb0', fg: '#111111',
+      text: 'Can use more moves than most cards, letting it keep constant pressure on the enemy.',
+      icon: '<g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 3.5 Q8 8 3.5 8"/><path d="M16 3.5 Q16 8 20.5 8"/><path d="M8 20.5 Q8 16 3.5 16"/><path d="M16 20.5 Q16 16 20.5 16"/></g>' }
+  };
+
+  /* ---------- card-specific tokens ---------- */
+  // Shown under Role and Style in the info panel for the cards that list them.
+  var TOKENS = {
+    ret: { abbr: 'RET', name: 'Rough Energy Tokens', color: '#4fd1e6',
+      text: 'Build up as this card fights and make its damage hit harder.',
+      points: [
+        'Starts at 0 and holds up to 6.',
+        'Gains +1 each time this card uses a move, except while in Jackpot.',
+        'Each RET adds +5 damage to this card’s damage.',
+        'Resets to 0 when the card enters phase 1, which happens again automatically when Jackpot ends.'
+      ] },
+    bt: { abbr: 'BT', name: 'Blood Tokens', color: '#ee5470',
+      text: 'Fuel for Blood Rush, this card’s power-up mode.',
+      points: [
+        'Starts at 1 and holds up to 10.',
+        'Gains +1 every turn (+2 with Yuji).',
+        'Needs 6 BT (8 with Yuji) to activate Blood Rush.',
+        'While Blood Rush is active, damage is +5 for every BT held, BT gain is doubled, and each move spends BT equal to its CET cost.',
+        'Blood Rush ends after 4 turns or after Overwhelming Blood Wave. BT and CET then reset to 1.'
+      ] },
+    tt: { abbr: 'TT', name: 'Transfiguration Tokens', color: '#b88aff',
+      text: 'Placed on enemies. An enemy that collects enough of them is executed.',
+      points: [
+        'Every enemy gains +1 TT at the start of the battle.',
+        'An enemy gains +1 TT when it hits this card with a physical attack, and loses 1 TT when it is healed.',
+        'This card has a Grace Threshold of 4 TT. An enemy that reaches it is executed after 1 turn, and the Threshold then rises by +1.',
+        'Self Embodiment of Perfection raises the Threshold by +4 and gives each enemy +2 TT after every turn (+1 on the last turn). Threshold gains are permanent.',
+        'Armed Assault can add +1 TT instead of dealing damage.'
+      ] },
+    rbt: { abbr: 'RBT', name: 'Rage Burst Tokens', color: '#e8a93d',
+      text: 'Fill up as this card takes damage, then trigger Rage Burst.',
+      points: [
+        'Starts at 0.',
+        'Gains +1 every time this card takes damage.',
+        'At 3 RBT, Rage Burst can activate: +30 HP, +4 CET and +20 damage for 3 turns.',
+        'RBT resets to 0 when Rage Burst activates, and none can be gained while it is active.'
+      ] },
+    ct: { abbr: 'CT', name: 'Cursed Tokens', color: '#ea5a4f',
+      text: 'Stored curses that power this card’s extra move and its biggest attacks.',
+      points: [
+        'Rolls a dice at battle start and starts with that many (max 15). Needs at least 1 to use Cursed Manipulation.',
+        'Cursed Manipulation is an extra move: deal 5 damage to 1 target for every CT.',
+        'Gain CT with Cursed Extraction (+1, or +2 if it executes). Absorbing a Cursed Spirit ally below 25 HP gives 3 CT.',
+        'Spending 3 CT at once returns the absorbed ally to battle. While absorbed, this card can use one of that ally’s moves (not special moves) for 2 CET.',
+        'Barrage may cost 1 CT (on a roll of 4+). Maximum: Uzumaki needs at least 3 CT and deals 15 damage per CT to all enemies.',
+        'Womb Profusion resets CT to 1, then gives +1 CT every universal turn. When it ends, this card loses 10 CT.'
+      ] },
+    oh: { abbr: 'OH', name: 'Overheat Tokens', color: '#ff7a45',
+      text: 'Heat that builds up as this card fires its biggest blasts.',
+      points: [
+        'Starts at 0 and holds up to 5.',
+        'Granite Blast adds +1 (+3 for a Precision Blast on 1 enemy).',
+        'Sweeet removes 1.',
+        'With more than 4 Overheat Tokens (the max is 5), this card cannot use Granite Blast or Granite Beam.'
+      ] },
+    lt: { abbr: 'LT', name: 'Lawyer Tokens', color: '#e3bf45',
+      text: 'Build up this card’s damage as the trial goes on.',
+      points: [
+        'Starts at 0 and holds up to 5.',
+        'Each LT adds +5 damage to this card’s damage.',
+        'Gavel Combo gives +1 LT. Gavel Smash costs 2 LT.',
+        'During Deadly Sentencing, a failed Silence also gives +1 LT.'
+      ] }
+  };
+
+  /* ---------- cards ---------- */
+  var CARDS = [
+    { name: 'The Honored One',   alt: 'The Honored One, Legendary Sorcerer card, 300 HP',        src: 'cards/the-honored-one.png',   role: 'damage',  style: 'burst' },
+    { name: 'Restless Gambler',  alt: 'Restless Gambler, Legendary Sorcerer card, 250 HP',       src: 'cards/restless-gambler.png',  role: 'chaos',   style: 'luck',      tokens: ['ret'] },
+    { name: 'Blood Brother',     alt: 'Blood Brother, Legendary Sorcerer card, 225 HP',          src: 'cards/blood-brother.png',     role: 'control', style: 'sustained', tokens: ['bt'] },
+    { name: 'Perfect Soul',      alt: 'Perfect Soul, Legendary Cursed Spirit card, 315 HP',      src: 'cards/perfect-soul.png',      role: 'damage',  style: 'scaling',   tokens: ['tt'] },
+    { name: 'Tactical Switcher', alt: 'Tactical Switcher, Legendary Sorcerer card, 375 HP',      src: 'cards/tactical-switcher.png', role: 'tank',    style: 'protector' },
+    { name: 'Volcano Head',      alt: 'Volcano Head, Legendary Cursed Spirit card, 290 HP',      src: 'cards/volcano-head.png',      role: 'damage',  style: 'sustained', tokens: ['rbt'] },
+    { name: 'Abyssal Squid',     alt: 'Abyssal Squid, Legendary Cursed Spirit card, 360 HP',     src: 'cards/abyssal-squid.png',     role: 'tank',    style: 'scaling' },
+    { name: 'The Vessel',        alt: 'The Vessel, Special Sorcerer card, 275 HP',               src: 'cards/the-vessel.png',        role: 'control', style: 'burst' },
+    { name: 'Copy Cat',          alt: 'Copy Cat, Legendary Sorcerer card, 325 HP',               src: 'cards/copy-cat.png',          role: 'support', style: 'burst' },
+    { name: 'Frame Breaker',     alt: 'Frame Breaker, Special Sorcerer card, 225 HP',            src: 'cards/frame-breaker.png',     role: 'chaos',   style: 'burst' },
+    { name: 'Kenjaku',           alt: 'Kenjaku, Legendary Sorcerer card, 250 HP',                src: 'cards/kenjaku.png',           role: 'control', style: 'scaling',   tokens: ['ct'] },
+    { name: 'Defensive Lawyer',  alt: 'Defensive Lawyer, Legendary Sorcerer card, 220 HP',       src: 'cards/defensive-lawyer.png',  role: 'chaos',   style: 'turn',      tokens: ['lt'] },
+    { name: 'Hair Cannon',       alt: 'Hair Cannon, Legendary Sorcerer card, 330 HP',            src: 'cards/hair-cannon.png',       role: 'damage',  style: 'burst',     tokens: ['oh'] }
+  ];
+  var ASPECT = 750 / 1050;
+//@@CORE-A-END
+
+  var grid = document.getElementById('card-grid');
+  var zoom = document.getElementById('zoom');
+  var backdrop = document.getElementById('zoom-backdrop');
+  var current = null; // { thumb, big, info, closing }
+
+  CARDS.forEach(function (c) {
+    var item = document.createElement('div');
+    item.className = 'card-item';
+    item.innerHTML = '<button type="button" class="card-thumb" aria-label="Enlarge ' + c.name + '"><img src="' + c.src + '" alt="' + c.alt + '"></button><span class="card-name">' + c.name + '</span>';
+    var thumb = item.querySelector('.card-thumb');
+    thumb.addEventListener('click', function () { openCard(thumb, c); });
+    grid.appendChild(item);
+  });
+
+  function badge(kind, def) {
+    if (def.img) return '<img class="badge-img ' + kind + '" src="' + def.img + '" alt="">';
+    return '<span class="badge ' + kind + '" style="background:' + def.bg + ';color:' + def.fg + ';--ibg:' + def.bg + '">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true">' + def.icon + '</svg></span>';
+  }
+  function infoHTML(c) {
+    var r = ROLES[c.role], s = STYLES[c.style];
+    var h = '<h2>' + c.name + '</h2>';
+    if (r) h += '<section class="info-block"><span class="info-label">Role</span><div class="info-row">' + badge('role', r) +
+      '<div><b>' + r.name + '</b><p>' + r.text + '</p></div></div></section>';
+    if (s) h += '<section class="info-block"><span class="info-label">Style</span><div class="info-row">' + badge('style', s) +
+      '<div><b>' + s.name + '</b><p>' + s.text + '</p></div></div></section>';
+    if (!r && !s) h += '<p class="info-none">This card has no role or style.</p>';
+    (c.tokens || []).forEach(function (id, i) {
+      var t = TOKENS[id];
+      if (!t) return;
+      h += '<section class="info-block token">' + (i === 0 ? '<span class="info-label">Card tokens</span>' : '') +
+        '<div class="token-head"><span class="token-chip" style="color:' + t.color + '">' + t.abbr + '</span><b>' + t.name + '</b></div>' +
+        '<p class="token-text">' + t.text + '</p><ul>' +
+        t.points.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ul></section>';
+    });
+    return h;
+  }
+
+  function place(el, r) {
+    el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
+    el.style.width = r.width + 'px'; el.style.height = r.height + 'px';
+  }
+  // Wide screens: card on the left, info on the right, the pair centered.
+  // Narrow screens: card on top, info below it.
+  function layout() {
+    var vw = window.innerWidth, vh = window.innerHeight, pad = 16;
+    if (vw >= 760) {
+      var gap = 24, pw = Math.min(380, Math.max(300, vw * 0.3));
+      var w = Math.min((vh - 2 * pad) * ASPECT, 560, vw - 2 * pad - gap - pw);
+      var h = w / ASPECT;
+      var left = (vw - (w + gap + pw)) / 2, top = (vh - h) / 2;
+      return { card: { left: left, top: top, width: w, height: h }, info: { left: left + w + gap, top: top, width: pw, height: h } };
+    }
+    var w2 = Math.min(vw - 2 * pad, vh * 0.5 * ASPECT), h2 = w2 / ASPECT;
+    var it = pad + h2 + 12;
+    return {
+      card: { left: (vw - w2) / 2, top: pad, width: w2, height: h2 },
+      info: { left: pad, top: it, width: vw - 2 * pad, height: Math.max(120, vh - it - pad) }
+    };
+  }
+
+  function openCard(thumb, c) {
+    if (current) return;
+    var from = thumb.getBoundingClientRect();
+    var big = document.createElement('button');
+    big.type = 'button';
+    big.className = 'zoom-card';
+    big.setAttribute('aria-label', 'Close enlarged ' + c.name);
+    big.innerHTML = '<img src="' + c.src + '" alt="' + c.alt + '">';
+    place(big, from);
+    var info = document.createElement('aside');
+    info.className = 'zoom-info';
+    info.setAttribute('aria-label', c.name + ' details');
+    info.innerHTML = infoHTML(c);
+    var L = layout();
+    place(info, L.info);
+    zoom.appendChild(info);
+    zoom.appendChild(big);
+    zoom.hidden = false;
+    current = { thumb: thumb, big: big, info: info, closing: false };
+    thumb.classList.add('lifted');
+    big.offsetWidth; // let the start position apply before animating
+    zoom.classList.add('open');
+    place(big, L.card);
+    big.focus({ preventScroll: true });
+    big.addEventListener('click', closeCard);
+  }
+
+  function closeCard() {
+    if (!current || current.closing) return;
+    var cur = current;
+    cur.closing = true;
+    zoom.classList.remove('open');
+    place(cur.big, cur.thumb.getBoundingClientRect());
+    var done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      cur.thumb.classList.remove('lifted');
+      cur.big.remove();
+      cur.info.remove();
+      zoom.hidden = true;
+      current = null;
+      cur.thumb.focus({ preventScroll: true });
+    }
+    cur.big.addEventListener('transitionend', function (e) { if (e.propertyName === 'width') finish(); });
+    setTimeout(finish, 500);
+  }
+
+  backdrop.addEventListener('click', closeCard);
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeCard(); });
+  window.addEventListener('resize', function () {
+    if (current && !current.closing) {
+      var L = layout();
+      place(current.big, L.card);
+      place(current.info, L.info);
+    }
+  });
+
+//@@CORE-B-BEGIN
+  /* ================================================================================================
+     RULES: the game's data and pure helpers. The match server and the screens both read these, but only
+     the match server (createEngine, below) ever changes a game state. Screens only draw what it publishes.
+     ================================================================================================ */
+  // Draft, draft, ban, ban, draft, draft, ban, ban, then each player drafts their last card.
+  // That is 3 drafts and 2 bans per player (10 of the 12 cards get picked or banned).
+  var PER_PLAYER = 3;
+  var BANS_PER_PLAYER = 2;
+  var ORDER = [
+    { p: 1, a: 'draft' }, { p: 2, a: 'draft' }, { p: 1, a: 'ban' }, { p: 2, a: 'ban' },
+    { p: 1, a: 'draft' }, { p: 2, a: 'draft' }, { p: 1, a: 'ban' }, { p: 2, a: 'ban' },
+    { p: 1, a: 'draft' }, { p: 2, a: 'draft' }
+  ];
+  var ACTIONS_PER_TURN = 2;
+  var MAX_CET = 9;   // no card can hold more CET than this
+  var START_CET = 3; // every card starts the battle with this much CET
+  var GAIN_COSTS_ACTION = false; // true = Gain CET would also spend one of the actions
+  var OPTS = ['gain', 'm1', 'm2', 'dom', 'm3', 'pas'];
+  var OPT_LABEL = { gain: 'Gain CET', m1: 'Use Move 1', m2: 'Use Move 2', dom: 'Domain', m3: 'Use Move 3', pas: 'Use Passive' };
+  var NO_OPT = { dom: 'No domain on this card', pas: 'Passive works automatically' };
+
+  function cardKey(c) { return c.src.split('/').pop().replace('.png', ''); }
+  function tokenSrc(c) { return 'cards/tokens/' + cardKey(c) + '.png'; }
+  function cardDef(id) {
+    for (var i = 0; i < CARDS.length; i++) if (cardKey(CARDS[i]) === id) return CARDS[i];
+    return null;
+  }
+
+  // Conditions: each returns '' when met, or the reason text when not.
+  function below(n) { return function (s) { return s.hp < n ? '' : 'Must be below ' + n + ' HP'; }; }
+  function above(n) { return function (s) { return s.hp > n ? '' : 'Must be over ' + n + ' HP'; }; }
+  function flag(k, why) { return function (s) { return s.fx[k] ? '' : why; }; }
+  function tokensOf(k, n, nm) { return function (s) { return s.tok[k] >= n ? '' : 'Needs ' + n + ' ' + nm + (n > 1 ? 's' : ''); }; }
+  function allOf() { var fs = arguments; return function (s, b) { for (var i = 0; i < fs.length; i++) { var r = fs[i](s, b); if (r) return r; } return ''; }; }
+
+  // Per-card battle data, read off the cards. hp = starting HP, gain = CET gained by Gain CET.
+  // m1 / m2 / m3 = the moves from left to right, top to bottom. cost = CET cost, uses = max uses per battle (none = unlimited),
+  // lock = turns the move is unavailable after use, req = extra condition, auto = never clickable.
+  function rikaUp(s) { return s.fx.summoned ? '' : 'Rika must be summoned'; }
+  // Hair Cannon: Granite Blast / Granite Beam stop at 5 Overheat Tokens, and CET can never drop below 2.
+  function ryuReq(cost, heat) {
+    return function (s) {
+      if (heat && s.tok.oh > 4) return 'Overheated (' + s.tok.oh + ' Overheat Tokens)';
+      return s.cet - cost < 2 ? 'Can’t drop below 2 CET (needs ' + (cost + 2) + ')' : '';
+    };
+  }
+  var BD = {
+    'the-honored-one': { hp: 300, gain: 1,
+      dom: { name: '0.2 Second Infinite Void', cost: 1, uses: 1, req: below(180) },
+      m1: { name: 'Lapse Blue', cost: 3 },
+      m2: { name: 'Reversal Red', cost: 4 },
+      m3: { name: 'Hollow Purple Flash', cost: 6, uses: 1 },
+      pas: { name: 'Limitless: Recover', cost: 1, lock: 2, req: flag('limitless', 'Limitless is down') } },
+    'restless-gambler': { hp: 250, gain: 1,
+      dom: { name: 'Idle Death Gamble', cost: 1 },
+      m1: { name: 'Hard Kick', cost: 3 },
+      m2: { name: 'Rough Combo', cost: 5, uses: 1, unlimitedIf: 'jackpot' },
+      m3: { name: 'Shutter Doors', cost: 2 },
+      pas: null },
+    'blood-brother': { hp: 225, gain: 1,
+      dom: null,
+      m1: { name: 'Piercing Blood', cost: 3 },
+      m2: { name: 'Blood Blades', cost: 5 },
+      m3: { name: 'Overwhelming Blood Wave', cost: 6, uses: 1, req: flag('bloodRush', 'Blood Rush must be active') },
+      pas: null },
+    'perfect-soul': { hp: 315, gain: 2,
+      dom: { name: 'Self Embodiment of Perfection', cost: 6, uses: 1, req: above(40) },
+      m1: { name: 'Soul Gun', cost: 4 },
+      m2: { name: 'Armed Assault', cost: 5 },
+      m3: { name: 'Black Flash Transfiguration', cost: 6, uses: 1 },
+      pas: null },
+    'tactical-switcher': { hp: 375, gain: 1,
+      dom: null,
+      m1: { name: 'Brute Punch', cost: 3 },
+      m2: { name: 'Cursed Switch', cost: 5 },
+      m3: { name: 'Todo’s Imagination', cost: 6, uses: 1, req: below(50) },
+      pas: null },
+    'volcano-head': { hp: 290, gain: 1,
+      dom: { name: 'Coffin of the Iron Mountain', cost: 2, uses: 2, req: flag('rageBurst', 'Rage Burst must be active') },
+      m1: { name: 'Flame Beam', cost: 3 },
+      m2: { name: 'Burning Sphere', cost: 4 },
+      m3: { name: 'Maximum Meteor', cost: 6, uses: 1 },
+      pas: null },
+    'abyssal-squid': { hp: 360, gain: 1,
+      dom: { name: 'Horizon of the Captivating Skandha', cost: 2, uses: 1, req: above(50) },
+      m1: { name: 'Water Stream', cost: 3 },
+      m2: { name: 'Tidal Bite', cost: 4 },
+      m3: { name: 'Whirlpool Suction', cost: 5, uses: 1, req: flag('evolved', 'Must be Evolved') },
+      pas: null },
+    'the-vessel': { hp: 275, gain: 2,
+      dom: { name: 'Malevolent Shrine', auto: 'Used automatically after turning into Sukuna Form' },
+      m1: { name: 'Divergent Fists', cost: 4 },
+      m2: { name: 'Black Flash', cost: 5 },
+      m3: { name: 'Brother', cost: 6, uses: 1, req: function (s, b) { var t = b.cards['tactical-switcher']; return t && t.p === s.p && t.hp > 0 ? '' : 'Tactical Switcher must be on your team'; } },
+      pas: null },
+    'copy-cat': { hp: 325, gain: 3,
+      dom: { name: 'Authentic Mutual Love', cost: 0, uses: 1, req: allOf(below(200), function (s) { return (s.fx.copied || 0) >= 3 ? '' : 'Needs 3 techniques copied'; }) },
+      m1: { name: 'Slash/Block', cost: 5 },
+      m2: { name: 'Heal/Flesh Wound', cost: 8 },
+      m3: { name: 'Pure Love Beam', cost: 9, uses: 1, req: allOf(below(200), flag('summoned', 'Rika must be summoned')) },
+      pas: null },
+    'frame-breaker': { hp: 225, gain: 1,
+      dom: { name: 'Time Cell Moon Palace', cost: 1, uses: 2, req: flag('spirit', 'Must be in Spirit Form') },
+      m1: { name: 'Sneak Attack', cost: 3 },
+      m2: { name: 'Frame Barrage', cost: 4 },
+      m3: { name: 'Vengeful Spirit', cost: 1, req: flag('executed', 'Only after this card is executed') },
+      pas: null },
+    'kenjaku': { hp: 250, gain: 2,
+      dom: { name: 'Womb Profusion', cost: 5, uses: 1, req: tokensOf('ct', 6, 'Cursed Token') },
+      m1: { name: 'Cursed Extraction', cost: 4 },
+      m2: { name: 'Barrage', cost: 5 },
+      m3: { name: 'Maximum: Uzumaki', cost: 7, uses: 1, req: tokensOf('ct', 3, 'Cursed Token') },
+      pas: { name: 'Cursed Manipulation', cost: 0, req: tokensOf('ct', 1, 'Cursed Token') } },
+    'hair-cannon': { hp: 330, gain: 3,
+      dom: null,
+      m1: { name: 'Granite Blast', cost: 4, req: ryuReq(4, true) },
+      m2: { name: 'Sweeet', cost: 7, req: ryuReq(7, false) },
+      m3: { name: 'Granite Beam', cost: 8, uses: 1, req: ryuReq(8, true) },
+      pas: null },
+    'defensive-lawyer': { hp: 220, gain: 1,
+      dom: { name: 'Deadly Sentencing', cost: 0, req: function (s) { return s.moves > 0 ? '' : 'This card must attack first'; } },
+      m1: { name: 'Gavel Combo', cost: 2 },
+      m2: { name: 'Gavel Smash', cost: 3 },
+      m3: { name: 'Executioner’s Sword', cost: 5, req: flag('deathPenalty', 'Death Penalty must be active') },
+      pas: null }
+  };
+
+  // Damage, healing, restriction and domain rules for every move, read off the cards.
+  // t: one (pick an enemy), multi (pick 1-3, damage shared out), all, self, ally (pick a friend), none (effect not built yet)
+  var EFX = {
+    'the-honored-one': {
+      dom: { turnsByEnemies: true, restrictAll: true, heal: 30, costLess: 1, loseCet: true, limitlessDown: true, clash: 2, txt: 'Restricts every enemy (3 / 2 / 1 turns for 1 / 2 / 3 enemies), +30 HP, your moves cost 1 less, lose all CET' },
+      m1: { t: 'all', dmg: 45 }, m2: { t: 'one', dmg: 65 }, m3: { t: 'one', dmg: 220 },
+      pas: { t: 'self', heal: 10, limitlessDown: true, txt: 'Heals 10 HP, then Limitless goes down for 2 turns' } },
+    'restless-gambler': {
+      dom: { turns: 2, jackpot: true, clash: 3, txt: '2 turns. Roll a die each turn for Jackpot (CET +1 more, heals 120 each turn)' },
+      m1: { t: 'one', dmg: 40, restrict: 1 }, m2: { t: 'one', dmg: 70 }, m3: { t: 'one', dmg: 15, restrict: 1 } },
+    'blood-brother': { m1: { t: 'one', dmg: 30 }, m2: { t: 'one', dmg: 35 }, m3: { t: 'one', dmg: 150 } },
+    'perfect-soul': {
+      dom: { turns: 3, clash: 3, txt: '3 turns (Transfiguration tokens aren’t built yet)' },
+      m1: { t: 'multi', dmg: 60 },
+      m2: { t: 'choice', txt: '55 damage to 1 enemy OR give 1 enemy +1 Transfiguration Token (no damage)',
+        modes: [ { k: 'hit', label: 'Strike · 55 damage to 1 enemy', t: 'one', dmg: 55 }, { k: 'tt', label: 'Give 1 enemy +1 Transfiguration Token', t: 'one', tt: 1 } ] }, m3: { t: 'one', dmg: 140 } },
+    'tactical-switcher': { m1: { t: 'one', dmg: 45, restrict: 1 }, m2: { t: 'one', dmg: 70 }, m3: { t: 'self', heal: 100 } },
+    'volcano-head': {
+      dom: { turns: 1, dmgRoll: 30, clash: 4, noDomainAfter: 2, txt: 'Roll a die: every enemy takes 30 × the roll' },
+      m1: { t: 'one', dmg: 75 }, m2: { t: 'one', restrict: 2 }, m3: { t: 'all', dmg: 80 } },
+    'abyssal-squid': {
+      dom: { turns: 3, restrictAll: true, selfRestrictAfter: 3, txt: '3 turns. Restricts every enemy, then you’re restricted for 3 turns' },
+      m1: { t: 'one', dmg: 10, streak: 15 }, m2: { t: 'one', dmg: 35 }, m3: { t: 'all', dmg: 70, lowHp: { hp: 150, dmg: 90 } } },
+    'the-vessel': {
+      m1: { t: 'one', dmg: 30, bonusRoll: { min: 3, dmg: 40 } }, m2: { t: 'one', dmg: 40 }, m3: { t: 'none' } },
+    'copy-cat': {
+      dom: { turns: 3, clash: 3, txt: '3 turns (copied moves aren’t built yet)' },
+      m1: { t: 'choice', txt: '45 damage to 1 enemy OR, if Rika is summoned, copy a move from 1 enemy',
+        modes: [ { k: 'slash', label: 'Slash · 45 damage to 1 enemy', t: 'one', dmg: 45 },
+                 { k: 'copy', label: 'Copy a move from 1 enemy (needs Rika)', t: 'one', copy: 1, req: rikaUp } ] },
+      m2: { t: 'choice', txt: 'Heal 1 ally or yourself for 40 HP OR, if Rika is summoned, deal 30 damage to 1 enemy and copy 1 move from them',
+        modes: [ { k: 'heal', label: 'Heal · +40 HP to you or an ally', t: 'ally', heal: 40 },
+                 { k: 'wound', label: 'Flesh Wound · 30 damage and copy a move (needs Rika)', t: 'one', dmg: 30, copy: 1, req: rikaUp } ] },
+      m3: { t: 'one', dmg: 200, beam: 4, rikaOff: 1, txt: 'Disables Rika for 1 turn. In a Beam Clash (roll 4+) it hits the enemy it clashes with' } },
+    'hair-cannon': {
+      m1: { t: 'choice', txt: '35 damage to all enemies (+1 Overheat Token) OR 70 damage to 1 enemy through a Precision Blast (+3 Overheat Tokens)',
+        modes: [ { k: 'all', label: '35 to all enemies · +1 Overheat', t: 'all', dmg: 35, oh: 1 }, { k: 'one', label: '70 to 1 enemy (Precision Blast) · +3 Overheat', t: 'one', dmg: 70, oh: 3 } ] },
+      m2: { t: 'one', dmg: 50, ohDown: 1 },
+      m3: { t: 'all', dmg: 135, beam: 3, beamDmg: 150, txt: 'In a Beam Clash (roll 3+) it deals 150 to the enemy it clashes with instead, if it wins' } },
+    'frame-breaker': {
+      dom: { turns: 3, noEnemyGain: true, retaliate: 40, clash: 3, txt: '3 turns. Enemies can’t gain CET and take 40 when they attack' },
+      m1: { t: 'one', dmg: 35 }, m2: { t: 'one', dmg: 65, restrict: 1 }, m3: { t: 'none' } },
+    'kenjaku': {
+      dom: { turns: 5, universal: true, ctReset: true, ctPerTurn: 1, enemyDmgMinus: 10, ctLossAfter: 10, txt: '5 universal turns. Cursed Tokens reset to 1 then +1 each turn, enemies deal 10 less' },
+      m1: { t: 'one', dmg: 35, ct: 1 },
+      m2: { t: 'choice', txt: '45 damage to 1 enemy OR 15 damage to each of them',
+        modes: [ { k: 'one', label: '45 damage to 1 enemy', t: 'one', dmg: 45 }, { k: 'all', label: '15 damage to each enemy', t: 'all', dmg: 15 } ] },
+      m3: { t: 'all', dmgPerTok: { k: 'ct', n: 15, name: 'Cursed Token' } },
+      pas: { t: 'one', dmgPerTok: { k: 'ct', n: 5, name: 'Cursed Token' } } },
+    'defensive-lawyer': {
+      dom: { t: 'one', trial: true, turns: 6, clash: 3, txt: 'Pick a defendant. 6-turn trial: secret Confess / Silence / Deny each turn' },
+      m1: { t: 'one', dmg: 25, lt: 1 }, m2: { t: 'one', dmg: 50, lt: -2 }, m3: { t: 'one', exec: true, txt: 'Win 1 of up to 3 dice rounds to execute the target. A tie does nothing.' } }
+  };
+
+  /* ----- full-screen domain rules (shown after Hakari or Higuruma opens their domain) ----- */
+  var DOM_INFO = {
+    'restless-gambler': {
+      title: 'Idle Death Gamble', who: 'Kinji Hakari', lead: 'Hakari’s domain is open for 2 turns.',
+      sections: [
+        { h: 'The roll', lines: ['At the start of each of Hakari’s turns (including the turn it opened), Hakari’s player rolls a die.',
+          'Rolling at least the current target number starts JACKPOT. The target starts at 6.',
+          'An even roll lowers the target number by 1 (down to 2). An odd roll raises it by 1 (up to 6).'] },
+        { h: 'Jackpot', lines: ['Hakari’s CET gain goes up by 1 (to +2).', 'Hakari heals 120 HP at the end of each of his turns (up to his max HP).', 'Rough Combo can be used as many times as he likes.', 'Jackpot ends when the domain ends.'] },
+        { h: 'Domain Clash', lines: ['If an enemy opens a domain within 1 turn of this one, both sides roll. Hakari needs a 3 or higher.'] }
+      ] },
+    'defensive-lawyer': {
+      title: 'Deadly Sentencing', who: 'Hiromi Higuruma', lead: 'A trial has begun. It lasts 6 turns.',
+      sections: [
+        { h: 'One turn of the trial', lines: ['At the end of each of Higuruma’s turns: Higuruma’s player secretly picks Confess, Silence or Deny.',
+          'Then the defendant’s player picks one. If both picked the same, the roll needs +1.', 'Then the defendant’s player rolls the die. That is 1 turn.'] },
+        { h: 'The three actions', lines: ['Confess (roll 4+): pass cuts 3 more turns off the trial. Fail: the Death Penalty activates, the defendant is confiscated for 3 turns, and the domain ends.',
+          'Silence (roll 2+): pass and nothing happens. Fail: Higuruma gains 1 Lawyer Token and the trial runs 1 turn longer.',
+          'Deny (roll 3+): pass cuts 1 more turn off the trial. Fail: the defendant is confiscated for 2 turns and the domain ends.'] },
+        { h: 'Verdicts', lines: ['A confiscated card can’t do anything.',
+          'Pass 3 rolls in a row and the defendant is found innocent. Deadly Sentencing is then locked for 5 turns.',
+          'If the trial ends without the Death Penalty, the defendant’s player may demand one retrial for that card.',
+          'With the Death Penalty active, Higuruma can use Executioner’s Sword to try to execute a card.'] },
+        { h: 'Domain Clash', lines: ['If an enemy opens a domain within 1 turn of this one, both sides roll. Higuruma needs a 3 or higher.'] }
+      ] }
+  };
+
+  var TRIAL = { confess: { label: 'Confess', need: 4 }, silence: { label: 'Silence', need: 2 }, deny: { label: 'Deny', need: 3 } };
+
+  function foe(p) { return p === 1 ? 2 : 1; }
+  // A beam used within 1 turn of an enemy beam clashes with it. Returns the enemy card whose beam it would clash with.
+  function beamFoe(b, s) {
+    var lb = b.lastBeam;
+    if (!lb || lb.p === s.p || b.turnCount - lb.turnCount > 1) return null;
+    var c = b.cards[lb.id];
+    return c && !c.dead ? c : null;
+  }
+  function merged(sp, mode) {
+    if (!mode) return sp;
+    var o = {}, k;
+    for (k in sp) o[k] = sp[k];
+    for (k in mode) o[k] = mode[k];
+    return o;
+  }
+  function living(b, p) { return b.ids[p].filter(function (id) { return !b.cards[id].dead; }); }
+  function spec(id, key) { return (EFX[id] && EFX[id][key]) || { t: 'none' }; }
+  function addCet(s, n) { var a = Math.max(0, Math.min(MAX_CET, s.cet + n) - s.cet); s.cet += a; return a; }
+  function gainOf(s) { return BD[s.id].gain + (s.fx.jackpot ? 1 : 0); }
+  function costOf(b, s, key, m) {
+    var c = m.cost || 0, d = b.domain;
+    if (key !== 'dom' && key !== 'pas' && d && d.id === s.id && d.spec.costLess) c = Math.max(0, c - d.spec.costLess);
+    return c;
+  }
+  function restrictWhy(b, s) {
+    var d = b.domain;
+    if (s.confiscated > 0) return 'Confiscated (' + s.confiscated + ' more turn' + (s.confiscated === 1 ? '' : 's') + ')';
+    if (d && d.spec.restrictAll && d.p !== s.p) return 'Restricted by ' + d.name + ' (' + d.left + ' turn' + (d.left === 1 ? '' : 's') + ' left)';
+    if (s.restrict > 0) return 'Restricted (' + s.restrict + ' more turn' + (s.restrict === 1 ? '' : 's') + ')';
+    return '';
+  }
+  function specText(sp) {
+    var t = [];
+    if (sp.dmg) t.push(sp.dmg + ' damage' + (sp.t === 'all' ? ' to all enemies' : sp.t === 'multi' ? ', split between 1–3 enemies you pick' : ' to 1 enemy'));
+    if (sp.dmgPerTok) t.push(sp.dmgPerTok.n + ' damage per ' + sp.dmgPerTok.name + (sp.t === 'all' ? ' to all enemies' : ' to 1 enemy'));
+    if (sp.heal && !sp.turns && !sp.turnsByEnemies) t.push('heals ' + sp.heal + ' HP');
+    if (sp.restrict) t.push('restricts ' + sp.restrict + ' turn' + (sp.restrict === 1 ? '' : 's'));
+    if (sp.txt) t.push(sp.txt);
+    return t.join(' · ');
+  }
+  function lockWhy(b, s, key, m) {
+    var until = s.lockUntil[key], now = b.turnNo[s.p];
+    if (until === undefined || now > until) return '';
+    var rem = Math.min(m.lock, until - now + 1);
+    return (m.lockWhy || 'Recovering') + ' (' + rem + ' more turn' + (rem === 1 ? '' : 's') + ')';
+  }
+
+  // What one of the six options looks like for a card right now. o.why is empty when it can be used.
+  // The match server uses this same check before it lets any move through.
+  function optInfo(b, s, key) {
+    var bd = BD[s.id], d = b.domain;
+    var o = { key: key, label: OPT_LABEL[key], sub: '', fx: '', cost: '', cetCost: 0, why: '' };
+    var wait = b.phase === 'over' ? 'The battle is over' : b.phase !== 'play' ? 'The battle hasn’t started yet' : (b.turn !== s.p ? 'Not Player ' + s.p + '’s turn' : '');
+    if (key === 'gain') {
+      o.sub = '+' + Math.min(gainOf(s), Math.max(0, MAX_CET - s.cet)) + ' CET (max ' + MAX_CET + ')';
+      o.why = (s.dead ? 'Executed' : '') || wait || (s.confiscated > 0 ? restrictWhy(b, s) : '') || (s.moved ? 'Used a move this turn' : '') || (s.cet >= MAX_CET ? 'Already at max CET (' + MAX_CET + ')' : '') || (s.gained ? 'Already gained CET this turn' : '') ||
+        (d && d.spec.noEnemyGain && d.p !== s.p ? 'Can’t gain CET during ' + d.name : '') ||
+        (GAIN_COSTS_ACTION && b.actions < 1 ? 'No actions left' : '');
+      return o;
+    }
+    var m = bd[key];
+    if (!m) { o.sub = 'None'; o.why = NO_OPT[key]; return o; }
+    var sp = spec(s.id, key);
+    o.sub = m.name;
+    o.cetCost = costOf(b, s, key, m);
+    if (!m.auto) o.cost = o.cetCost ? o.cetCost + ' CET' : 'Free';
+    if (m.unlimitedIf) o.sub += ' · once, unlimited in Jackpot';
+    else if (!m.uses && !m.auto) o.sub += ' · unlimited';
+    else if (m.uses) o.sub += ' · ' + (m.uses === 1 ? 'once per battle' : (m.uses - (s.used[key] || 0)) + ' of ' + m.uses + ' uses left');
+    o.fx = specText(sp);
+    var blockedUntil = key === 'dom' && s.fx.domBlockUntil !== undefined && b.turnNo[s.p] <= s.fx.domBlockUntil ? s.fx.domBlockUntil - b.turnNo[s.p] + 1 : 0;
+    var clashing = key === 'dom' && d && d.p !== s.p;
+    o.why = (s.dead ? 'Executed' : '') || m.auto || wait ||
+      restrictWhy(b, s) ||
+      (b.actions < 1 ? 'No actions left' : '') ||
+      (s.gained ? 'Gained CET this turn' : '') ||
+      (m.uses && !(m.unlimitedIf && s.fx[m.unlimitedIf]) && (s.used[key] || 0) >= m.uses ? (m.uses === 1 ? 'Already used' : 'No uses left') : '') ||
+      lockWhy(b, s, key, m) ||
+      (blockedUntil ? 'Found innocent (' + blockedUntil + ' more turn' + (blockedUntil === 1 ? '' : 's') + ')' : '') ||
+      (key === 'dom' && d && d.p === s.p ? 'Your domain is still open' : '') ||
+      (clashing && b.turnCount - d.turnCount > 1 ? 'An enemy domain is already open' : '') ||
+      (key === 'dom' && b.noDomain > 0 ? 'No domains for ' + b.noDomain + ' more turn' + (b.noDomain === 1 ? '' : 's') : '') ||
+      (m.req ? m.req(s, b) : '') ||
+      (s.cet < o.cetCost ? 'Needs ' + o.cetCost + ' CET (has ' + s.cet + ')' : '');
+    if (clashing && !o.why) o.sub += ' · starts a Domain Clash';
+    if (sp.beam && !o.why && beamFoe(b, s)) o.sub += ' · starts a Beam Clash';
+    return o;
+  }
+
+
+  /* ================================================================================================
+     MATCH SERVER: createEngine()
+     The one and only copy of the game. It owns the state, rolls every die and coin, decides whose turn it is
+     and checks every request against the rules. It has no DOM and never trusts a screen:
+     a screen can only call request(seat, action), and the answer is either "ok" or a refusal.
+     Each time the state changes it publishes a plain-JSON snapshot through cfg.publish.
+     Inside the page there are two ways to host it: Local Play (both seats on one screen) and online
+     (the host's page runs it and writes snapshots to the shared db; the guest only reads them).
+     Seat 1 is always the host / first player, seat 2 the opponent. Screens never see "seat" as their own number:
+     each player is shown as the bottom player and their opponent on top (see the screens section).
+     ================================================================================================ */
+  function createEngine(cfg) {
+    var online = !!cfg.online, alive = true, timers = [];
+    var S = { rev: 0, online: online, names: cfg.names || ['Player 1', 'Player 2'], stage: 'draft', draft: null, battle: null, res: {}, popSeq: 0 };
+    var battle = null, draft = null;
+    var cbs = {};   // callbacks of the step in progress (dice, coin, pick, info). Never published.
+
+    function after(ms, fn) { timers.push(setTimeout(function () { if (alive) fn(); }, ms)); }
+    function pub() { if (!alive) return; S.rev++; cfg.publish(JSON.parse(JSON.stringify(S))); }
+    function no(msg) { return { ok: false, msg: msg }; }
+    function d6() { return 1 + Math.floor(Math.random() * 6); }
+    function pop(id, txt, cls) { battle.pops.push({ n: ++S.popSeq, id: id, txt: txt, cls: cls }); if (battle.pops.length > 24) battle.pops.shift(); }
+    function L(p) { return living(battle, p); }
+    // b.msg is the line shown on the table; b.log keeps the full text of each event for the Log.
+    function setMsg(txt, keep) {
+      battle.msg = txt;
+      if (keep !== false) { battle.log.push({ n: ++S.popSeq, t: txt }); if (battle.log.length > 40) battle.log.shift(); }
+    }
+
+    /* ---------- card picking ---------- */
+    function startDraft() {
+      draft = { order: ORDER.slice(), step: 0, picks: { 1: [], 2: [] }, bans: { 1: 0, 2: 0 }, cards: {} };
+      CARDS.forEach(function (c) { draft.cards[cardKey(c)] = null; });
+      S.stage = 'draft'; S.draft = draft; S.battle = null;
+      pub();
+    }
+    function anyFree() { return Object.keys(draft.cards).some(function (k) { return !draft.cards[k]; }); }
+    function pickCard(seat, id) {
+      var st = draft.order[draft.step];
+      if (S.stage !== 'draft' || !st) return no('Card picking is over.');
+      if (seat !== st.p) return no('It is not your turn to ' + st.a + ' a card.');
+      if (typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(draft.cards, id)) return no('Unknown card.');
+      if (draft.cards[id]) return no('That card is already taken.');
+      if (st.a === 'draft') {
+        draft.picks[st.p].push(id);
+        draft.cards[id] = { t: 'draft', p: st.p, n: draft.picks[st.p].length };
+      } else {
+        draft.bans[st.p]++;
+        draft.cards[id] = { t: 'ban', p: st.p };
+      }
+      draft.step++;
+      if (!anyFree()) draft.step = draft.order.length;
+      pub();
+      if (draft.step >= draft.order.length) after(1800, startBattle);
+      return { ok: true };
+    }
+
+    /* ---------- battle setup ---------- */
+    function newCardState(id, p) {
+      var bd = BD[id];
+      return { id: id, p: p, hp: bd.hp, max: bd.hp, cet: START_CET, gained: false, moved: false, moves: 0,
+        used: {}, lockUntil: {}, fx: id === 'the-honored-one' ? { limitless: true } : {}, dead: false, restrict: 0, confiscated: 0,
+        tok: { ret: 0, bt: 1, tt: 0, rbt: 0, ct: 1 + Math.floor(Math.random() * 6), lt: 0, oh: 0 } };
+    }
+    function startBattle() {
+      var cards = {};
+      [1, 2].forEach(function (p) { draft.picks[p].forEach(function (id) { cards[id] = newCardState(id, p); }); });
+      battle = {
+        ids: { 1: draft.picks[1].slice(), 2: draft.picks[2].slice() }, cards: cards,
+        phase: 'roll', rolls: { 1: null, 2: null }, rolling: false, rollWho: 1, lock: false, dieVal: null, first: null,
+        turn: 0, turnNo: { 1: 0, 2: 0 }, actions: 0, pending: null, dice: null, coin: null, pick: null, info: null, notes: [], turnCount: 0, pops: [], log: [], lastBeam: null, domain: null, noDomain: 0, winner: null,
+        msg: 'Player 1, click the die to roll.'
+      };
+      // Mahito's Idle Transfiguration: at battle start every enemy gains 1 Transfiguration Token
+      var mh0 = cards['perfect-soul'];
+      if (mh0) { mh0.fx.grace = 4; b0e(mh0.p === 1 ? 2 : 1); }
+      function b0e(p) { battle.ids[p].forEach(function (id) { cards[id].tok.tt = 1; }); }
+      S.stage = 'battle'; S.battle = battle;
+      pub();
+    }
+
+    /* ---------- roll for first turn ---------- */
+    function rollOff(seat) {
+      var b = battle;
+      if (!b || b.phase !== 'roll' || b.rolling || b.lock) return no('Not time to roll.');
+      var who = b.rolls[1] === null ? 1 : 2;
+      if (seat !== who) return no('It is not your roll.');
+      b.rolling = true; b.rollWho = who;
+      pub();
+      after(950, function () {
+        var v = d6();
+        b.rolls[who] = v; b.dieVal = v; b.rolling = false;
+        if (who === 1) { b.msg = 'Player 1 rolled ' + v + '. Player 2, click the die to roll.'; pub(); }
+        else resolveRolls();
+      });
+      return { ok: true };
+    }
+    function resolveRolls() {
+      var b = battle, r1 = b.rolls[1], r2 = b.rolls[2];
+      b.lock = true;
+      if (r1 === r2) {
+        b.msg = 'Both rolled ' + r1 + '. Roll again!';
+        pub();
+        after(1700, function () {
+          b.rolls = { 1: null, 2: null }; b.dieVal = null; b.lock = false;
+          b.msg = 'Player 1, click the die to roll.';
+          pub();
+        });
+      } else {
+        b.first = r1 > r2 ? 1 : 2;
+        b.msg = 'Player 1 rolled ' + r1 + ', Player 2 rolled ' + r2 + '. Player ' + b.first + ' goes first!';
+        pub();
+        after(2200, function () { startPlay(b.first); });
+      }
+    }
+
+    /* ---------- turns and actions ---------- */
+    function busy() { var b = battle; return !!(b.dice || b.coin || b.pick || b.pending || b.info); }
+    function startTurn(p) {
+      var b = battle;
+      b.turn = p; b.turnNo[p]++; b.turnCount++; b.actions = ACTIONS_PER_TURN; b.pending = null;
+      b.ids[p].forEach(function (id) {
+        var s = b.cards[id];
+        s.gained = false; s.moved = false;
+        // Limitless comes back once its recovery is over
+        if (s.fx.limitless === false && !s.dead && (s.lockUntil.pas === undefined || b.turnNo[p] > s.lockUntil.pas)) s.fx.limitless = true;
+      });
+    }
+    function startPlay(p) {
+      var b = battle;
+      b.phase = 'play';
+      startTurn(p);
+      b.msg = 'Player ' + p + ', you get ' + ACTIONS_PER_TURN + ' actions. Pick a card!';
+      pub();
+    }
+    function endTurn(seat) {
+      var b = battle;
+      if (!b || b.phase !== 'play') return no('The battle is not in progress.');
+      if (seat !== b.turn) return no('It is not your turn.');
+      if (busy()) return no('Finish what is happening first.');
+      var p = b.turn, n = foe(p), d = b.domain, notes = [];
+      // cards that did nothing this turn gain their CET automatically
+      var auto = 0;
+      b.ids[p].forEach(function (id) {
+        var s = b.cards[id];
+        if (s.dead || s.confiscated > 0 || s.moved || s.gained) return;
+        if (d && d.spec.noEnemyGain && d.p !== s.p) return;
+        if (s.cet >= MAX_CET) return;
+        var g = addCet(s, gainOf(s)); s.gained = true; auto++; pop(id, '+' + g + ' CET', 'cet');
+      });
+      if (auto) notes.push(auto + ' idle card' + (auto === 1 ? '' : 's') + ' gained CET.');
+      // end-of-turn upkeep
+      b.ids[p].forEach(function (id) {
+        var s = b.cards[id];
+        if (s.restrict > 0) s.restrict--;
+        if (s.confiscated > 0) s.confiscated--;
+        if (s.fx.rbRecover > 0) s.fx.rbRecover--;
+        if (s.fx.rikaLeft > 0) { s.fx.rikaLeft--; if (s.fx.rikaLeft === 0) { s.fx.summoned = false; notes.push('Rika’s 20 turns ended.'); } }
+        if (s.fx.rikaOff > 0) { s.fx.rikaOff--; if (s.fx.rikaOff === 0 && s.fx.rikaLeft > 0) s.fx.summoned = true; }
+        if (s.fx.rageBurst > 0) {
+          s.fx.rageBurst--;
+          if (s.fx.rageBurst === 0) { s.fx.rbRecover = 1; s.tok.rbt = 0; notes.push(cardDef(id).name + '’s Rage Burst ended.'); }
+        }
+        if (!s.dead && s.fx.jackpot) {
+          var heal = Math.min(s.max - s.hp, 120);
+          if (heal > 0) { s.hp += heal; pop(id, '+' + heal + ' HP', 'heal'); notes.push(cardDef(id).name + ' healed ' + heal + ' HP from Jackpot.'); }
+        }
+      });
+      if (b.noDomain > 0) b.noDomain--;
+
+      function afterTrial() {
+        var dd = b.domain;
+        if (dd && !dd.spec.trial && (dd.universal || dd.p !== p)) {
+          dd.left--;
+          if (dd.spec.ctPerTurn) { var ow = b.cards[dd.id]; ow.tok.ct = Math.min(15, ow.tok.ct + dd.spec.ctPerTurn); }
+          if (dd.left <= 0) { notes.push(dd.name + ' ended.'); closeDomain(); }
+        }
+        startTurn(n);
+        function done() {
+          var dn = b.domain;
+          b.notes.forEach(function (x) { notes.push(x); }); b.notes = [];
+          setMsg(notes.join(' ') + ' Player ' + n + ', you get ' + ACTIONS_PER_TURN + ' actions.' +
+            (dn ? ' ' + dn.name + ' has ' + dn.left + ' turn' + (dn.left === 1 ? '' : 's') + ' left.' : ''));
+          pub();
+        }
+        var d2 = b.domain;
+        if (d2 && d2.p === n && d2.spec.jackpot && !b.cards[d2.id].fx.jackpot) jackpotRoll(b.cards[d2.id], function (t) { notes.push(t); done(); });
+        else done();
+      }
+      if (d && d.spec.trial && d.p === p) runTrial(notes, afterTrial); else afterTrial();
+      return { ok: true };
+    }
+
+    /* ---------- dice, coin, secret picks and rule screens: each waits for one request ---------- */
+    // items: [{ p: who rolls, need: optional number to meet }]. cb gets the list of values.
+    function rollDice(title, items, cb) {
+      battle.dice = { title: title, items: items, vals: [], idx: 0, rolling: false, finished: false, last: 0 };
+      cbs.dice = cb;
+      pub();
+    }
+    function diceClick(seat) {
+      var b = battle, dc = b && b.dice;
+      if (!dc || dc.rolling || dc.finished) return no('There is no die to roll.');
+      if (seat !== dc.items[dc.idx].p) return no('It is not your roll.');
+      dc.rolling = true; pub();
+      after(950, function () {
+        if (b.dice !== dc) return;
+        var v = d6();
+        dc.vals[dc.idx] = v; dc.last = v; dc.idx++; dc.rolling = false;
+        if (dc.idx >= dc.items.length) {
+          dc.finished = true; pub();
+          after(1600, function () { if (b.dice !== dc) return; var cb = cbs.dice; cbs.dice = null; b.dice = null; cb(dc.vals); });
+        } else pub();
+      });
+      return { ok: true };
+    }
+    function flipCoin(title, cb) { battle.coin = { title: title, face: null, flipping: false }; cbs.coin = cb; pub(); }
+    function coinClick(seat) {
+      var b = battle, c = b && b.coin;
+      if (!c || c.flipping || c.face) return no('There is no coin to flip.');
+      c.flipping = true; pub();
+      after(1200, function () {
+        if (b.coin !== c) return;
+        c.face = Math.random() < 0.5 ? 1 : 2; c.flipping = false; pub();
+        after(1600, function () { if (b.coin !== c) return; var cb = cbs.coin; cbs.coin = null; b.coin = null; cb(c.face); });
+      });
+      return { ok: true };
+    }
+    function askPick(title, who, options, note, cb) { battle.pick = { title: title, who: who, options: options, note: note || '' }; cbs.pick = cb; pub(); }
+    function pickAnswer(seat, k) {
+      var b = battle, pk = b && b.pick;
+      if (!pk) return no('Nothing to answer.');
+      if (seat !== pk.who) return no('It is not your choice.');
+      if (!pk.options.some(function (o) { return o.k === k; })) return no('That is not one of the options.');
+      var cb = cbs.pick; cbs.pick = null; b.pick = null; cb(k);
+      return { ok: true };
+    }
+    function showInfo(who, key, cb) {
+      var b = battle, info = { who: who, key: key, ready: false, acks: { 1: false, 2: false } };
+      b.info = info; cbs.info = cb;
+      pub();
+      after(3000, function () { if (b.info === info) { info.ready = true; pub(); } });
+    }
+    function ackInfo(seat) {
+      var b = battle, info = b && b.info;
+      if (!info) return no('Nothing to confirm.');
+      if (!info.ready) return no('Give it a moment to be read.');
+      info.acks[seat] = true;
+      // online both players must confirm, so each has time to read. Local play: one press continues.
+      if (online && !(info.acks[1] && info.acks[2])) { pub(); return { ok: true }; }
+      var cb = cbs.info; cbs.info = null; b.info = null; cb();
+      return { ok: true };
+    }
+
+    /* ---------- effects: damage, healing, restriction, domains ---------- */
+    /* ---------- damage ---------- */
+    var ryuRolls = {};   // execution checks already rolled for Hair Cannon in the action being resolved
+    function ceil5(n) { return Math.ceil(n / 5) * 5; }
+    // What a hit would really do, with no side effects: who takes it and for how much.
+    function calc(att, tgt, dmg, force) {
+      var b = battle, d = b.domain, redirected = null;
+      if (!force) {
+        var ry = b.cards['hair-cannon'];
+        // Satisfaction: below 50 HP, Hair Cannon takes one hit for an ally, even if it executes him
+        if (ry && !ry.dead && tgt.id !== ry.id && tgt.p === ry.p && ry.hp < 50 && !ry.fx.satisfied && dmg > 0) { redirected = ry; tgt = ry; }
+        if (d && d.spec.enemyDmgMinus && d.p !== att.p) dmg = Math.max(0, dmg - d.spec.enemyDmgMinus);
+        if (tgt.id === 'copy-cat' && dmg > 0) dmg += 5;                    // “takes +5 more damage when attacked”
+        if (tgt.id === 'hair-cannon' && dmg > 0) dmg = ceil5(dmg * 0.25);  // Best Output: 75% damage reduction, rounded up to the nearest 5
+      }
+      return { tgt: tgt, dmg: dmg, redirected: redirected, blocked: !force && dmg > 0 && !!tgt.fx.limitless };
+    }
+    // Best Output: executing Hair Cannon with less CET than him needs a roll of 5+, otherwise he stays at 15 HP.
+    function gateFor(att, tgt, dmg) { return tgt.id === 'hair-cannon' && !tgt.dead && dmg > 0 && tgt.hp - dmg <= 0 && att.cet < tgt.cet; }
+    // Asks for the execution roll (with a clickable die) before damage is dealt. hit() uses the result.
+    function ryuGate(att, targets, dmgOf, next) {
+      var b = battle, ry = b.cards['hair-cannon'], lethal = false;
+      if (!ry || ry.dead) return next();
+      targets.forEach(function (t) {
+        if (t.dead) return;
+        var c = calc(att, t, dmgOf(t), false);
+        if (c.tgt === ry && !c.blocked && gateFor(att, ry, c.dmg)) lethal = true;
+      });
+      if (!lethal) return next();
+      rollDice('Execution check: ' + cardDef(att.id).name + ' needs 5+ to execute ' + cardDef(ry.id).name, [{ p: att.p, need: 5 }], function (v) { ryuRolls[ry.id] = v[0]; next(); });
+    }
+
+    // returns what happened to the target
+    function hit(att, tgt, dmg, force) {
+      var b = battle, orig = tgt, c = calc(att, tgt, dmg, force);
+      tgt = c.tgt; dmg = c.dmg;
+      if (tgt.dead) return { dealt: 0 };
+      if (c.redirected) { tgt.fx.satisfied = true; pop(tgt.id, 'Takes the hit', 'blk'); b.notes.push(cardDef(tgt.id).name + ' took the hit for ' + cardDef(orig.id).name + '.'); }
+      if (c.blocked) {
+        tgt.fx.limitless = false; tgt.lockUntil.pas = b.turnNo[tgt.p] + 2;
+        pop(tgt.id, 'Blocked!', 'blk');
+        return { dealt: 0, blocked: true };
+      }
+      if (!force && gateFor(att, tgt, dmg)) {
+        var rv = ryuRolls[tgt.id];
+        if (rv === undefined) rv = d6();
+        delete ryuRolls[tgt.id];
+        if (rv < 5) {
+          dmg = tgt.hp - Math.min(tgt.hp, 15);
+          pop(tgt.id, 'Survived!', 'blk');
+          b.notes.push(cardDef(tgt.id).name + ' survived at ' + (tgt.hp - dmg) + ' HP (the execution roll was ' + rv + ', it needed 5+).');
+        } else b.notes.push('The execution roll was ' + rv + ': ' + cardDef(tgt.id).name + ' could not hold on.');
+      }
+      var before = tgt.hp;
+      tgt.hp = Math.max(0, tgt.hp - dmg);
+      var dealt = before - tgt.hp, by = tgt.id !== orig.id ? tgt : null;
+      pop(tgt.id, '−' + dealt, 'dmg');
+      // 5 Minutes: below 275 HP Rika is summoned for 20 turns
+      if (tgt.id === 'copy-cat' && tgt.hp > 0 && tgt.hp < 275 && !tgt.fx.rikaDone) {
+        tgt.fx.rikaDone = true; tgt.fx.summoned = true; tgt.fx.rikaLeft = 20; pop(tgt.id, 'Rika!', 'cet');
+        b.notes.push('Rika was summoned for 20 turns.');
+      }
+      if (dealt > 0 && tgt.hp > 0) rageGain(tgt);
+      if (tgt.hp <= 0) {
+        tgt.dead = true; pop(tgt.id, 'Executed', 'ko');
+        var d = b.domain;
+        if (d && (d.id === tgt.id || (d.trial && d.trial.def === tgt.id))) closeDomain();
+        return { dealt: dealt, killed: true, by: by };
+      }
+      return { dealt: dealt, by: by };
+    }
+
+    // Jogo: every time he takes damage he gains 1 Rage Burst Token; at 3 Rage Burst starts by itself.
+    function rageGain(s) {
+      var b = battle;
+      if (s.id !== 'volcano-head' || s.dead || s.fx.rageBurst > 0 || s.fx.rbRecover > 0) return;
+      s.tok.rbt++;
+      pop(s.id, '+1 RBT', 'cet');
+      if (s.tok.rbt < 3) return;
+      s.tok.rbt = 0; s.fx.rageBurst = 3;
+      var h = Math.min(s.max - s.hp, 30); s.hp += h; var rc = addCet(s, 4);
+      pop(s.id, 'RAGE BURST!', 'ko');
+      b.notes.push(cardDef(s.id).name + ' entered RAGE BURST! +' + h + ' HP, +' + rc + ' CET and +20 damage for 3 turns.');
+    }
+
+    function jackpotRoll(s, cb) {
+      var min = s.fx.jmin || 6, name = cardDef(s.id).name;
+      rollDice(name + ': roll for Jackpot (needs ' + min + '+)', [{ p: s.p, need: min }], function (v) {
+        var r = v[0];
+        if (r >= min) { s.fx.jackpot = true; pop(s.id, 'JACKPOT!', 'cet'); cb(name + ' rolled ' + r + ' and hit JACKPOT!'); return; }
+        s.fx.jmin = r % 2 === 0 ? Math.max(2, min - 1) : Math.min(6, min + 1);
+        cb(name + ' rolled ' + r + ' (needed ' + min + '). Jackpot now needs ' + s.fx.jmin + '+.');
+      });
+    }
+
+    function closeDomain() {
+      var b = battle, d = b.domain;
+      if (!d) return;
+      var s = b.cards[d.id];
+      if (d.spec.jackpot) { s.fx.jackpot = false; s.fx.jmin = 6; }
+      if (d.spec.selfRestrictAfter) s.restrict = d.spec.selfRestrictAfter;
+      if (d.spec.noDomainAfter) b.noDomain = d.spec.noDomainAfter;
+      if (d.spec.ctLossAfter) s.tok.ct = Math.max(0, s.tok.ct - d.spec.ctLossAfter);
+      b.domain = null;
+    }
+
+    // A clash (domain or beam): two opposing sides used the same kind of power within 1 turn of each other.
+    // Both roll against their card's requirement. Both meeting it twice in a row goes to CET, then HP %, then a coin.
+    // If only one of them meets it, that side wins. If neither does, roll again. cb gets true when s wins.
+    function clashRolls(label, s, needN, old, needO, say, cb) {
+      var b = battle, oc = b.cards[old.id], nName = cardDef(s.id).name, oName = cardDef(old.id).name, streak = 0;
+      say.push(label.toUpperCase() + '! ' + nName + ' vs ' + oName + '.');
+      function round() {
+        rollDice(label + '! ' + nName + ' needs ' + needN + '+, ' + oName + ' needs ' + needO + '+' + (streak ? ' · both passed, one more time' : ''),
+          [{ p: s.p, need: needN }, { p: old.p, need: needO }], function (v) {
+            var a = v[0] >= needN, c = v[1] >= needO;
+            if (a && c) { streak++; if (streak >= 2) return tiebreak(); return round(); }
+            if (a !== c) { say.push((a ? nName : oName) + ' passed the roll and the other failed.'); return cb(a); }
+            say.push('Neither passed, so they rolled again.'); streak = 0; round();
+          });
+      }
+      function tiebreak() {
+        var cn = s.cet, co = oc.cet;
+        say.push('Both passed twice in a row.');
+        if (cn !== co) { say.push((cn > co ? nName : oName) + ' wins with more CET (' + cn + ' vs ' + co + ').'); return cb(cn > co); }
+        var l = s.hp * oc.max, r = oc.hp * s.max, pn = Math.round(100 * s.hp / s.max), po = Math.round(100 * oc.hp / oc.max);
+        if (l !== r) { say.push('CET tied. ' + (l > r ? nName : oName) + ' wins with more HP % (' + pn + '% vs ' + po + '%).'); return cb(l > r); }
+        say.push('CET and HP % are both tied. Coin flip!');
+        flipCoin(label + ' tiebreaker: flip the coin', function (face) { say.push('The coin landed on Player ' + face + '.'); cb(face === s.p); });
+      }
+      round();
+    }
+    function clash(s, sp, old, say, cb) { clashRolls('Domain Clash', s, sp.clash || 3, old, old.spec.clash || 3, say, cb); }
+
+    // Opens a domain (after a Domain Clash if needed). Pushes sentences onto say, then calls done.
+    function openDomain(s, m, sp, tid, say, done) {
+      var b = battle, name = cardDef(s.id).name, old = b.domain;
+      function open() {
+        var turns = sp.turnsByEnemies ? Math.max(1, Math.min(3, 4 - L(foe(s.p)).length)) : sp.turns;
+        b.domain = { id: s.id, p: s.p, name: m.name, left: turns, total: turns, spec: sp, universal: !!sp.universal, turnCount: b.turnCount,
+          trial: sp.trial ? { def: tid, left: turns, streak: 0 } : null };
+        say.push(name + ' opened ' + m.name + (sp.trial ? ' with ' + cardDef(tid).name + ' on trial' : '') + ' for ' + turns + ' ' + (sp.universal ? 'universal ' : '') + 'turn' + (turns === 1 ? '' : 's') + '.');
+        if (sp.heal) { var h = Math.min(s.max - s.hp, sp.heal); s.hp += h; pop(s.id, '+' + h + ' HP', 'heal'); }
+        if (sp.loseCet) s.cet = 0;
+        if (sp.limitlessDown) { s.fx.limitless = false; s.lockUntil.pas = b.turnNo[s.p] + 2; }
+        if (sp.ctReset) s.tok.ct = 1;
+        if (sp.restrictAll) say.push('Every enemy is restricted.');
+        if (sp.noEnemyGain) say.push('Enemies can’t gain CET.');
+        var steps = [];
+        if (sp.jackpot) steps.push(function (next) { s.fx.jmin = 6; jackpotRoll(s, function (t) { say.push(t); next(); }); });
+        if (sp.dmgRoll) steps.push(function (next) {
+          rollDice(m.name + ': roll for damage (30 × the roll)', [{ p: s.p }], function (v) {
+            var dmg = sp.dmgRoll * v[0], tg = L(foe(s.p)).map(function (id) { return b.cards[id]; });
+            say.push('It rolled ' + v[0] + ' for ' + dmg + ' damage.');
+            ryuGate(s, tg, function () { return dmg; }, function () {
+              tg.forEach(function (c2) {
+                var r2 = hit(s, c2, dmg), who = r2.by ? cardDef(r2.by.id).name : cardDef(c2.id).name;
+                say.push(who + (r2.blocked ? ' blocked it with Limitless.' : ' took ' + r2.dealt + (r2.killed ? ' and is executed!' : '.')));
+              });
+              next();
+            });
+          });
+        });
+        function run(i) { if (i >= steps.length) return done(); steps[i](function () { run(i + 1); }); }
+        if (DOM_INFO[s.id]) showInfo(s.p, s.id, function () { run(0); }); else run(0);
+      }
+      if (old && old.p !== s.p) {
+        clash(s, sp, old, say, function (won) {
+          if (!won) {
+            // a failed clash does not count as a use
+            s.used.dom = Math.max(0, (s.used.dom || 0) - 1); delete s.lockUntil.dom;
+            say.push(name + '’s domain failed to open. It does not count as a use.');
+            return done();
+          }
+          say.push(cardDef(old.id).name + '’s domain was broken.');
+          closeDomain(); open();
+        });
+      } else open();
+    }
+
+    /* ----- the Lawyer's trial (Deadly Sentencing) ----- */
+    // One round: the Lawyer picks in secret, the defendant answers, then the defendant rolls.
+    // The Lawyer's pick lives only in this function. It is never part of a published state.
+    function runTrial(notes, done) {
+      var b = battle, d = b.domain, tr = d.trial, Lw = b.cards[d.id], D = b.cards[tr.def];
+      var lName = cardDef(Lw.id).name, dName = cardDef(D.id).name;
+      if (D.dead) { closeDomain(); return done(); }
+      function opts() { return ['confess', 'silence', 'deny'].map(function (k) { return { k: k, label: TRIAL[k].label + ' (roll ' + TRIAL[k].need + '+)' }; }); }
+      function answer(lk) {
+        askPick('Trial of ' + dName + ': pick your answer', D.p, opts(),
+          online ? lName + ' has already chosen in secret.' : 'Player ' + Lw.p + ', look away!', function (dk) {
+            var same = lk === dk, need = TRIAL[dk].need + (same ? 1 : 0);
+            notes.push('Trial: ' + lName + ' chose ' + TRIAL[lk].label + ', ' + dName + ' chose ' + TRIAL[dk].label + (same ? ' (same choice, +1 to the roll)' : '') + '.');
+            rollDice('Trial: ' + TRIAL[lk].label + ' vs ' + TRIAL[dk].label + (same ? ' · same choice, +1' : '') + '. ' + dName + ' needs ' + need + '+', [{ p: D.p, need: need }], function (v) {
+              var ok = v[0] >= need;
+              notes.push(dName + ' rolled ' + v[0] + (ok ? ' and passed.' : ' and failed.'));
+              tr.left -= 1;
+              if (ok) {
+                tr.streak++;
+                if (dk === 'confess') { tr.left -= 3; notes.push('The trial is cut short by 3 more turns.'); }
+                if (dk === 'deny') { tr.left -= 1; notes.push('The trial is cut short by 1 more turn.'); }
+              } else {
+                tr.streak = 0;
+                if (dk === 'confess' || dk === 'deny') {
+                  var turns = dk === 'confess' ? 3 : 2;
+                  if (dk === 'confess') { Lw.fx.deathPenalty = true; pop(Lw.id, 'Death Penalty', 'ko'); notes.push('DEATH PENALTY is active!'); }
+                  D.confiscated = turns; pop(D.id, 'Confiscated', 'blk');
+                  notes.push(dName + ' is confiscated for ' + turns + ' turns and the domain ends.');
+                  if (dk === 'deny') return endTrial(Lw, D, notes, done);
+                  closeDomain(); return done();
+                }
+                Lw.tok.lt = Math.min(5, Lw.tok.lt + 1); tr.left += 1; pop(Lw.id, '+1 LT', 'cet');
+                notes.push(lName + ' gained 1 Lawyer Token and the trial runs 1 turn longer.');
+              }
+              if (tr.streak >= 3) {
+                Lw.fx.domBlockUntil = b.turnNo[Lw.p] + 5;
+                notes.push(dName + ' was found innocent after 3 passes in a row! Deadly Sentencing is locked for 5 turns.');
+                closeDomain(); return done();
+              }
+              if (tr.left <= 0) { notes.push('The trial ended with no verdict.'); return endTrial(Lw, D, notes, done); }
+              d.left = tr.left; done();
+            });
+          });
+      }
+      askPick('Trial of ' + dName + ': ' + lName + ' secretly picks an action', Lw.p, opts(),
+        online ? 'Your pick stays hidden from your opponent until both have chosen.' : 'Player ' + D.p + ', look away! Your pick stays hidden until both have chosen.', function (lk) {
+          if (online) return answer(lk);
+          askPick('Locked in!', D.p, [{ k: 'ok', label: 'Player ' + D.p + ' is ready' }], 'Pass the screen to Player ' + D.p + '.', function () { answer(lk); });
+        });
+    }
+
+    // After a trial that did not end in the Death Penalty, the defendant's player may demand one retrial per card.
+    function endTrial(Lw, D, notes, done) {
+      var b = battle, d = b.domain, sp = d.spec, dName = cardDef(D.id).name;
+      closeDomain();
+      if (Lw.dead || D.dead || Lw.fx.deathPenalty || D.fx.retried) return done();
+      askPick('Retrial?', D.p, [{ k: 'yes', label: 'Demand a retrial' }, { k: 'no', label: 'Accept the verdict' }],
+        dName + ' was not sentenced to death. Player ' + D.p + ' may demand one retrial for this card: a fresh ' + sp.turns + '-turn trial. Pass 3 rolls in a row to be found innocent, but a failed Confess still means the Death Penalty.',
+        function (k) {
+          if (k !== 'yes') return done();
+          D.fx.retried = true;
+          b.domain = { id: Lw.id, p: Lw.p, name: d.name, left: sp.turns, total: sp.turns, spec: sp, universal: false, turnCount: b.turnCount, trial: { def: D.id, left: sp.turns, streak: 0 } };
+          notes.push(dName + ' demanded a retrial! A new trial begins.');
+          done();
+        });
+    }
+
+    // Executioner's Sword: up to 3 rounds of both rolling, the Lawyer needs to win just one.
+    function executioner(s, tid, say, done) {
+      var b = battle, T = b.cards[tid], round = 0, tn = cardDef(tid).name;
+      function next() {
+        round++;
+        rollDice('Executioner’s Sword, round ' + round + ' of 3: higher roll wins (a tie does nothing)', [{ p: s.p }, { p: T.p }], function (v) {
+          if (v[0] === v[1]) { say.push('The roll tied, so nothing happened. Death Penalty is still active.'); return done(); }
+          if (v[0] > v[1]) {
+            s.fx.deathPenalty = false;
+            hit(s, T, T.hp, true);
+            say.push(cardDef(s.id).name + ' won a round. ' + tn + ' is executed! Death Penalty is over.');
+            return done();
+          }
+          if (round >= 3) { s.fx.deathPenalty = false; say.push(tn + ' won all 3 rounds and survived. Death Penalty is over.'); return done(); }
+          say.push(tn + ' won round ' + round + '.');
+          next();
+        });
+      }
+      next();
+    }
+
+    function checkWin() {
+      var b = battle;
+      [1, 2].forEach(function (p) {
+        if (b.phase !== 'over' && !L(p).length) { b.phase = 'over'; b.winner = foe(p); b.domain = null; }
+      });
+    }
+
+    /* ---------- using a card option ---------- */
+    // Moves that need a target wait on the table for one (b.pending). Everything else resolves at once.
+    function perform(seat, id, key) {
+      var b = battle;
+      if (!b || b.phase !== 'play') return no('The battle is not in progress.');
+      if (typeof id !== 'string' || !b.cards[id] || OPTS.indexOf(key) < 0) return no('Unknown card or option.');
+      var s = b.cards[id];
+      if (s.p !== seat) return no('That is not your card.');
+      if (seat !== b.turn) return no('It is not your turn.');
+      if (busy()) return no('Finish what is happening first.');
+      var o = optInfo(b, s, key);
+      if (o.why) return no(o.why);
+      var name = cardDef(id).name;
+      if (key === 'gain') {
+        var g = addCet(s, gainOf(s));
+        s.gained = true;
+        if (GAIN_COSTS_ACTION) b.actions--;
+        pop(id, '+' + g + ' CET', 'cet');
+        setMsg(name + ' gained ' + g + ' CET.' + (b.actions < 1 ? ' No actions left. End your turn.' : ''));
+        pub();
+        return { ok: true };
+      }
+      var sp = spec(id, key);
+      if (sp.t === 'choice') {
+        // a move with two ways to use it asks first. Nothing is spent until the choice is made.
+        var avail = sp.modes.filter(function (m) { return !m.req || !m.req(s, b); });
+        if (avail.length === 1) return startMove(id, key, avail[0]), { ok: true };
+        var opts = avail.map(function (m) { return { k: m.k, label: m.label }; }).concat([{ k: 'cancel', label: 'Cancel' }]);
+        askPick(BD[id][key].name + ': choose how to use it', seat, opts, 'Nothing is spent until you have chosen.', function (k) {
+          var md = null;
+          avail.forEach(function (m) { if (m.k === k) md = m; });
+          if (!md) { b.msg = 'Cancelled. Nothing was spent.'; return pub(); }
+          startMove(id, key, md);
+        });
+        return { ok: true };
+      }
+      startMove(id, key, null);
+      return { ok: true };
+    }
+    // Moves that need a target wait on the table for one (b.pending). Everything else resolves at once.
+    function startMove(id, key, mode) {
+      var b = battle, s = b.cards[id], sp = merged(spec(id, key), mode);
+      // a beam used right after an enemy beam clashes with it, so the clash picks the target
+      var bf = sp.beam ? beamFoe(b, s) : null;
+      if (bf) return resolve(id, key, sp.t === 'one' ? bf.id : null, mode);
+      var needs = sp.t === 'one' || sp.t === 'ally' || sp.t === 'multi';
+      if (needs) {
+        var pool = sp.t === 'ally' ? L(s.p) : L(foe(s.p));
+        if (pool.length > 1) {
+          b.pending = { id: id, key: key, pool: pool, multi: sp.t === 'multi', sel: [], mode: mode };
+          b.msg = sp.t === 'multi' ? 'Pick 1 to 3 targets for ' + BD[id][key].name + ', then confirm.' : sp.t === 'ally' ? 'Pick who gets healed.' :
+            key === 'dom' ? 'Pick who goes on trial.' : 'Pick a target for ' + BD[id][key].name + '.';
+          pub();
+          return;
+        }
+        return resolve(id, key, sp.t === 'multi' ? [pool[0]] : pool[0], mode);
+      }
+      resolve(id, key, null, mode);
+    }
+    function pendingFor(seat) {
+      var b = battle, pd = b && b.pending;
+      if (!pd) return { err: no('Nothing is waiting for a target.') };
+      if (seat !== b.turn || b.cards[pd.id].p !== seat) return { err: no('It is not your turn.') };
+      return { pd: pd };
+    }
+    function pickTarget(seat, id) {
+      var r = pendingFor(seat); if (r.err) return r.err;
+      var pd = r.pd;
+      if (typeof id !== 'string' || pd.pool.indexOf(id) < 0) return no('Pick one of the glowing cards, or cancel.');
+      if (pd.multi) {
+        var ix = pd.sel.indexOf(id);
+        if (ix > -1) pd.sel.splice(ix, 1); else pd.sel.push(id);
+        var n = pd.sel.length, tot = 60;
+        battle.msg = n ? n + ' chosen: ' + Math.floor(tot / n) + ' damage each. Confirm when ready.' : 'Pick 1 to 3 targets for ' + BD[pd.id][pd.key].name + ', then confirm.';
+        pub();
+        return { ok: true };
+      }
+      battle.pending = null; resolve(pd.id, pd.key, id, pd.mode);
+      return { ok: true };
+    }
+    function confirmTargets(seat) {
+      var r = pendingFor(seat); if (r.err) return r.err;
+      var pd = r.pd;
+      if (!pd.multi || !pd.sel.length) return no('Pick at least one target.');
+      battle.pending = null; resolve(pd.id, pd.key, pd.sel.slice(), pd.mode);
+      return { ok: true };
+    }
+    function cancelPending(seat) {
+      var r = pendingFor(seat); if (r.err) return r.err;
+      battle.pending = null; battle.msg = 'Cancelled. Nothing was spent.'; pub();
+      return { ok: true };
+    }
+
+    function conclude(s, say) {
+      var b = battle;
+      b.notes.forEach(function (n) { say.push(n); }); b.notes = [];
+      if (s.id === 'restless-gambler' && !s.fx.jackpot) s.tok.ret = Math.min(6, s.tok.ret + 1);
+      checkWin();
+      if (b.phase === 'over') say.push('Player ' + b.winner + ' wins!');
+      else if (b.actions < 1) say.push('No actions left. End your turn.');
+      b.pending = null;
+      setMsg(say.join(' '));
+      pub();
+    }
+
+    function resolve(id, key, tid, mode) {
+      var b = battle, s = b.cards[id], bd = BD[id], m = bd[key], sp = merged(spec(id, key), mode), name = cardDef(id).name, say = [];
+      var cost = costOf(b, s, key, m);
+      s.cet -= cost; s.moved = true; s.moves++; s.used[key] = (s.used[key] || 0) + 1;
+      if (m.lock) s.lockUntil[key] = b.turnNo[s.p] + m.lock;
+      b.actions--;
+      pop(id, '', 'act');
+      say.push(name + ' used ' + m.name + (cost ? ' (−' + cost + ' CET)' : '') + '.');
+
+      if (key === 'dom') return openDomain(s, m, sp, tid, say, function () { conclude(s, say); });
+      if (sp.exec) return executioner(s, tid, say, function () { conclude(s, say); });
+
+      // Pure Love Beam: in exchange, Rika is disabled until the end of this card's next turn
+      if (sp.rikaOff) { s.fx.summoned = false; s.fx.rikaOff = sp.rikaOff + 1; }
+      // Beam Clash: a beam used within 1 turn of an enemy beam. Same dice rules as a Domain Clash.
+      var oldBeam = sp.beam ? beamFoe(b, s) : null;
+      if (sp.beam) b.lastBeam = { id: s.id, p: s.p, turnCount: b.turnCount };
+      if (oldBeam) {
+        var oc = b.cards[oldBeam.id];
+        return clashRolls('Beam Clash', s, sp.beam, { id: oc.id, p: oc.p }, spec(oc.id, 'm3').beam || 3, say, function (won) {
+          if (!won) { say.push(name + '’s beam was overpowered and did no damage.'); return conclude(s, say); }
+          var dmg = sp.beamDmg || sp.dmg || 0;
+          say.push(name + ' won the Beam Clash!');
+          ryuGate(s, [oc], function () { return dmg; }, function () {
+            var r2 = hit(s, oc, dmg), who = r2.by ? cardDef(r2.by.id).name : cardDef(oc.id).name;
+            say.push(r2.blocked ? who + ' blocked it with Limitless.' : who + ' took ' + r2.dealt + ' damage' + (r2.killed ? ' and is executed!' : '.'));
+            conclude(s, say);
+          });
+        });
+      }
+
+      var extra = 0;
+      function go() {
+        var targets = [], attack = !!(sp.dmg || sp.dmgPerTok);
+        if (sp.t === 'one' && tid) targets = [b.cards[tid]];
+        else if (sp.t === 'multi' && tid) targets = tid.map(function (i) { return b.cards[i]; });
+        else if (sp.t === 'all') targets = L(foe(s.p)).map(function (i) { return b.cards[i]; });
+        var base = (sp.dmg || 0) + extra;
+        if (sp.dmgPerTok) base = sp.dmgPerTok.n * s.tok[sp.dmgPerTok.k];
+        if (sp.streak && tid) { if (s.fx['last_' + key] === tid) base = sp.streak; s.fx['last_' + key] = tid; }
+        var bonus = (id === 'restless-gambler' ? 5 * s.tok.ret : 0) + (id === 'defensive-lawyer' ? 5 * s.tok.lt : 0) + (id === 'volcano-head' && s.fx.rageBurst > 0 ? 20 : 0);
+        function dmgFor(t) {
+          var dmg = base + bonus;
+          if (sp.t === 'multi') dmg = Math.floor(dmg / targets.length);
+          if (sp.lowHp && t.hp < sp.lowHp.hp) dmg = sp.lowHp.dmg;
+          return dmg;
+        }
+        function finish() {
+          if (sp.heal) {
+            var who = sp.t === 'ally' && tid ? b.cards[tid] : s;
+            var hh = Math.min(who.max - who.hp, sp.heal);
+            who.hp += hh; pop(who.id, '+' + hh + ' HP', 'heal');
+            var mh = b.cards['perfect-soul'];
+            if (hh > 0 && mh && !mh.dead && mh.p !== who.p && who.tok.tt > 0) { who.tok.tt--; say.push(cardDef(who.id).name + ' lost 1 Transfiguration Token from the healing.'); }
+            say.push(cardDef(who.id).name + ' healed ' + hh + ' HP.');
+          }
+          if (sp.copy) { s.fx.copied = (s.fx.copied || 0) + sp.copy; say.push(name + ' copied a move (' + s.fx.copied + ' copied so far). Using copied moves isn’t built yet.'); }
+          if (sp.tt) targets.forEach(function (t) { if (!t.dead) { t.tok.tt += sp.tt; pop(t.id, '+' + sp.tt + ' TT', 'cet'); say.push(cardDef(t.id).name + ' now has ' + t.tok.tt + ' Transfiguration Token' + (t.tok.tt === 1 ? '' : 's') + '.'); } });
+          if (sp.limitlessDown) s.fx.limitless = false;
+          if (sp.ct) s.tok.ct = Math.min(15, s.tok.ct + sp.ct);
+          if (sp.lt) s.tok.lt = Math.max(0, Math.min(5, s.tok.lt + sp.lt));
+          if (sp.oh) { s.tok.oh = Math.min(5, s.tok.oh + sp.oh); say.push(name + ' now has ' + s.tok.oh + ' Overheat Token' + (s.tok.oh === 1 ? '' : 's') + '.'); }
+          if (sp.ohDown) { s.tok.oh = Math.max(0, s.tok.oh - sp.ohDown); say.push(name + ' now has ' + s.tok.oh + ' Overheat Token' + (s.tok.oh === 1 ? '' : 's') + '.'); }
+          if (sp.t === 'none') say.push('(Its extra effect isn’t built yet.)');
+          conclude(s, say);
+        }
+        if (attack) {
+          ryuGate(s, targets, dmgFor, function () {
+            if (sp.t === 'multi') say.push(targets.length + ' target' + (targets.length === 1 ? '' : 's') + ': ' + Math.floor((base + bonus) / targets.length) + ' damage each.');
+            targets.forEach(function (t) {
+              var res = hit(s, t, dmgFor(t)), tn = res.by ? cardDef(res.by.id).name : cardDef(t.id).name;
+              say.push(res.blocked ? tn + ' blocked it with Limitless.' : tn + ' took ' + res.dealt + ' damage' + (res.killed ? ' and is executed!' : '.'));
+              if (sp.restrict && !t.dead && !res.blocked) t.restrict = Math.max(t.restrict, sp.restrict);
+            });
+            var d = b.domain;
+            if (d && d.spec.retaliate && d.p !== s.p && !s.dead) {
+              var rr = hit({ p: d.p, id: d.id }, s, d.spec.retaliate);
+              say.push(name + ' took ' + rr.dealt + ' damage from ' + d.name + (rr.killed ? ' and is executed!' : '.'));
+            }
+            finish();
+          });
+        } else {
+          if (sp.restrict) targets.forEach(function (t) { t.restrict = Math.max(t.restrict, sp.restrict); say.push(cardDef(t.id).name + ' is restricted for ' + sp.restrict + ' turns.'); pop(t.id, 'Restricted', 'blk'); });
+          finish();
+        }
+      }
+      if (sp.bonusRoll) {
+        rollDice(m.name + ': roll ' + sp.bonusRoll.min + '+ for +' + sp.bonusRoll.dmg + ' damage', [{ p: s.p, need: sp.bonusRoll.min }], function (v) {
+          if (v[0] >= sp.bonusRoll.min) { extra = sp.bonusRoll.dmg; say.push('Rolled ' + v[0] + ': +' + sp.bonusRoll.dmg + ' damage.'); }
+          else say.push('Rolled ' + v[0] + ': no bonus.');
+          go();
+        });
+      } else go();
+    }
+
+    /* ---------- the only door in: every request from a screen comes through here ---------- */
+    function request(seat, a) {
+      if (!alive) return no('The match has ended.');
+      if (seat !== 1 && seat !== 2) return no('Unknown player.');
+      if (!a || typeof a.t !== 'string') return no('Bad request.');
+      var needBattle = a.t !== 'pick';
+      if (needBattle && S.stage !== 'battle') return no('The battle has not started.');
+      try {
+        switch (a.t) {
+          case 'pick': return pickCard(seat, a.id);
+          case 'roll': return rollOff(seat);
+          case 'die': return diceClick(seat);
+          case 'coin': return coinClick(seat);
+          case 'answer': return pickAnswer(seat, a.k);
+          case 'ack': return ackInfo(seat);
+          case 'perform': return perform(seat, a.id, a.key);
+          case 'target': return pickTarget(seat, a.id);
+          case 'confirm': return confirmTargets(seat);
+          case 'cancel': return cancelPending(seat);
+          case 'end': return endTurn(seat);
+        }
+      } catch (e) { return no('That request was refused.'); }
+      return no('Unknown request.');
+    }
+
+    return {
+      start: startDraft,
+      request: request,
+      // lets the transport tell a remote player how their request went (published with the next snapshot)
+      report: function (seat, n, r) { S.res[seat] = { n: n, ok: !!r.ok, msg: r.ok ? '' : String(r.msg || '') }; pub(); },
+      destroy: function () { alive = false; timers.forEach(clearTimeout); timers = []; }
+    };
+  }
+
+//@@CORE-B-END
+  /* ================================================================================================
+     SCREENS: draw whatever the match server last published, and turn clicks into requests.
+     Nothing in this section changes the game. It keeps a read-only copy of the latest snapshot ("view").
+     Perspective: the player looking at the screen is always the bottom player (display seat 1, blue-purple)
+     and the opponent is on top (display seat 2, red-orange). Online, only usernames are shown.
+     Internally the host is seat 1 and the guest is seat 2; A(d) / D(a) convert between the two.
+     ================================================================================================ */
+  var canHover = !!(window.matchMedia && window.matchMedia('(hover: hover)').matches);
+  var stage = document.getElementById('screen-play');
+  var draftEl = document.getElementById('draft');
+  var peek = document.getElementById('peek');
+  var arena = document.getElementById('screen-battle');
+  var bzEl = document.getElementById('bz');
+  var bzBackdrop = document.getElementById('bz-backdrop');
+
+  var sess = null;          // { mode: 'local' | 'online', me: seat or null, names, send(action, seat), destroy() }
+  var view = null;          // latest snapshot from the match server
+  var draft = null, battle = null;
+  var pendingPick = null;   // phone: the token tapped and waiting for its confirm button
+  var bzs = null;           // the open card view: { id, big, cet, opts, closing }
+  var localPops = [], lastPopN = -1, dieTimer = null, logOpen = false, endHidden = false;
+  var FXCLS = { act: 'fx-act', dmg: 'fx-hurt', heal: 'fx-heal', cet: 'fx-cet', blk: 'fx-blk', ko: 'fx-ko' };
+
+  var PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function online() { return !!sess && sess.mode === 'online'; }
+  function isMine(a) { return !online() || sess.me === a; }       // local play: one screen controls both seats
+  function A(d) { return online() && sess.me === 2 ? 3 - d : d; }  // display seat -> real seat
+  function D(a) { return online() && sess.me === 2 ? 3 - a : a; }  // real seat -> display seat
+  function nm(a) { return online() ? esc(sess.names[a - 1]) : 'Player ' + a; }
+  // The server writes "Player 1" / "Player 2"; online those become the usernames.
+  function T(s) { return online() ? String(s).replace(/Player ([12])/g, function (m, n) { return nm(+n); }) : String(s); }
+
+  var toastTimer = null;
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+  // Every click on the table goes through here. The answer comes back as the next snapshot (or a refusal).
+  function send(a, seat) {
+    if (!sess) return;
+    Promise.resolve(sess.send(a, seat)).then(function (r) { if (r && r.ok === false && r.msg) toast(r.msg); });
+  }
+
+  /* ---------- a new snapshot arrives ---------- */
+  function applyState(st) {
+    view = st;
+    if (st.stage === 'draft') {
+      draft = st.draft; battle = null;
+      if (currentScreen !== 'play') show('play');
+      renderDraft();
+    } else {
+      draft = null; battle = st.battle;
+      if (currentScreen !== 'battle') show('battle');
+      st.battle.pops.forEach(function (p) {
+        if (p.n > lastPopN) { if (lastPopN >= 0) localPops.push({ id: p.id, txt: p.txt, cls: p.cls, t: Date.now() }); }
+      });
+      if (st.battle.pops.length) lastPopN = Math.max(lastPopN, st.battle.pops[st.battle.pops.length - 1].n);
+      else if (lastPopN < 0) lastPopN = 0;
+      if (bzs && !bzs.closing && (battle.dice || battle.coin || battle.pick || battle.info || battle.pending)) resetBZ();
+      renderBattle();
+      if (bzs && !bzs.closing) fillBZ();
+    }
+  }
+  function resetViews() { view = null; draft = null; battle = null; pendingPick = null; localPops = []; lastPopN = -1; logOpen = false; endHidden = false; resetBZ(); }
+
+  /* ---------- card picking ---------- */
+  function teamHTML(d) {
+    var a = A(d);
+    var h = '<div class="team p' + d + '"><span class="team-name">' + nm(a) + '</span><div class="slots">';
+    for (var i = 0; i < PER_PLAYER; i++) {
+      var id = draft.picks[a][i];
+      if (id) h += '<span class="slot filled"><img src="' + tokenSrc(cardDef(id)) + '" alt="' + cardDef(id).name + '"><b>' + (i + 1) + '</b></span>';
+      else h += '<span class="slot"><b>' + (i + 1) + '</b></span>';
+    }
+    return h + '</div></div>';
+  }
+
+  function renderDraft() {
+    hidePeek();
+    var d = draft, st = d.order[d.step], done = !st, mineTurn = !!st && isMine(st.p);
+    if (!mineTurn) pendingPick = null;
+    stage.setAttribute('data-mode', done ? 'done' : (st.a === 'ban' ? 'ban' : (D(st.p) === 1 ? 'p1' : 'p2')));
+
+    var h = '<header class="d-top"><button type="button" class="btn ghost" data-nav="menu">Main menu</button><span class="d-phase">Card picking</span></header>';
+    h += '<div class="d-banner">';
+    if (done) {
+      h += '<h2 class="d-action">Card picking complete</h2><p class="d-step">Each player drafted ' + PER_PLAYER + ' cards</p>' +
+        '<p class="d-hint">Heading to the battle…</p>';
+    } else {
+      var n = st.a === 'draft' ? d.picks[st.p].length + 1 : d.bans[st.p] + 1;
+      var verb = st.a === 'draft' ? 'Draft' : 'Ban';
+      var hint = !mineTurn ? 'Waiting for ' + nm(st.p) + ' to ' + verb.toLowerCase() + ' a card…' : canHover
+        ? 'Hover a token to preview its card, then click to ' + verb.toLowerCase() + ' it.' + (st.a === 'ban' ? ' Banned cards cannot be picked.' : '')
+        : 'Tap a token to preview its card, then confirm.';
+      h += '<span class="d-player p' + D(st.p) + '">' + nm(st.p) + '</span><h2 class="d-action">' + verb + ' a card</h2>' +
+        '<p class="d-step">' + verb + ' ' + n + ' of ' + (st.a === 'draft' ? PER_PLAYER : BANS_PER_PLAYER) + '</p><p class="d-hint">' + hint + '</p>';
+    }
+    h += '</div>';
+    h += '<div class="d-teams">' + teamHTML(1) + teamHTML(2) + '</div>';
+
+    h += '<div class="d-grid" role="list">';
+    CARDS.forEach(function (c) {
+      var id = cardKey(c), s = d.cards[id];
+      var cls = 'token', label = c.name;
+      if (s && s.t === 'draft') { cls += ' drafted p' + D(s.p); label += ', drafted by ' + nm(s.p) + ' as pick ' + s.n; }
+      else if (s && s.t === 'ban') { cls += ' banned'; label += ', banned by ' + nm(s.p); }
+      else if (done) { cls += ' locked'; }
+      else { cls += ' free'; label += ', available'; }
+      h += '<button type="button" role="listitem" class="' + cls + '" data-id="' + id + '" aria-label="' + label + '"' + (s || done || !mineTurn ? ' aria-disabled="true"' : '') + '>' +
+        '<span class="tk-disc"><img src="' + tokenSrc(c) + '" alt="">' +
+        (s && s.t === 'draft' ? '<span class="pick p' + D(s.p) + '">' + s.n + '</span>' : '') +
+        '</span><span class="tk-name">' + c.name + '</span></button>';
+    });
+    h += '</div>';
+
+    if (pendingPick && !done && d.cards[pendingPick] === null) {
+      var pc = cardDef(pendingPick), pv = st.a === 'draft' ? 'Draft' : 'Ban';
+      h += '<div class="confirm" role="dialog" aria-label="Confirm ' + pv.toLowerCase() + '"><img class="confirm-card" src="' + pc.src + '" alt="' + pc.alt + '">' +
+        '<p class="d-step">' + pv + ' ' + pc.name + '?</p><div class="c-actions">' +
+        '<button type="button" class="btn" data-act="confirm">' + pv + ' this card</button>' +
+        '<button type="button" class="btn ghost" data-act="cancel">Cancel</button></div></div>';
+    }
+    draftEl.innerHTML = h;
+  }
+
+  function showPeek(tok) {
+    if (!canHover || !draft) return;
+    var def = cardDef(tok.getAttribute('data-id'));
+    if (!def) return;
+    peekAt(tok.querySelector('.tk-disc').getBoundingClientRect(), def);
+  }
+  // Shows the full card, slightly transparent, beside the element at rect r.
+  function peekAt(r, def) {
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var h = Math.min(vh * 0.78, 470), w = h * ASPECT;
+    var left = r.right + 14;
+    if (left + w > vw - 8) left = r.left - 14 - w;
+    if (left < 8) left = Math.max(8, (vw - w) / 2);
+    var top = Math.min(Math.max(8, r.top + r.height / 2 - h / 2), vh - h - 8);
+    peek.src = def.src;
+    peek.alt = def.alt;
+    peek.style.left = left + 'px'; peek.style.top = top + 'px';
+    peek.style.width = w + 'px'; peek.style.height = h + 'px';
+    peek.hidden = false;
+  }
+  function hidePeek() { peek.hidden = true; }
+
+  stage.addEventListener('click', function (ev) {
+    var el = ev.target.closest('.token, [data-act]');
+    if (!el || !draft) return;
+    var st = draft.order[draft.step];
+    if (el.classList.contains('token')) {
+      var id = el.getAttribute('data-id');
+      if (!st || draft.cards[id] || !isMine(st.p)) return;
+      if (canHover) send({ t: 'pick', id: id }, st.p);
+      else { pendingPick = id; renderDraft(); }
+      return;
+    }
+    var act = el.getAttribute('data-act');
+    if (act === 'confirm' && pendingPick && st) { var pk = pendingPick; pendingPick = null; send({ t: 'pick', id: pk }, st.p); }
+    else if (act === 'cancel') { pendingPick = null; renderDraft(); }
+  });
+  stage.addEventListener('mouseover', function (ev) { var t = ev.target.closest('.token'); if (t) showPeek(t); });
+  stage.addEventListener('mouseout', function (ev) { var t = ev.target.closest('.token'); if (t && !t.contains(ev.relatedTarget)) hidePeek(); });
+  stage.addEventListener('focusin', function (ev) { var t = ev.target.closest('.token'); if (t) showPeek(t); });
+  stage.addEventListener('focusout', function (ev) { if (ev.target.closest('.token')) hidePeek(); });
+  stage.addEventListener('scroll', hidePeek);
+
+  /* ---------- battle ---------- */
+  function pipsHTML(v) {
+    var h = '';
+    for (var i = 0; i < 9; i++) h += '<i class="' + (PIPS[v].indexOf(i) > -1 ? 'on' : '') + '"></i>';
+    return h;
+  }
+  function cetStrip(n) {
+    var shown = Math.min(n, 6);
+    var h = '<div class="b-cet" role="img" aria-label="' + n + ' CET" style="--ov:' + (shown > 4 ? '-.7' : '-.5') + '">';
+    for (var i = 0; i < shown; i++) h += '<img class="cet-disc" src="cards/cet.png" alt="">';
+    return h + '<span class="cet-count">CET ' + n + '</span></div>';
+  }
+
+  function ruleOverlayHTML(b) {
+    var i = b.info, d = DOM_INFO[i.key], mine = isMine(i.who), other = online() ? (sess.me === 1 ? 2 : 1) : 0;
+    var h = '<div class="info-ov p' + D(i.who) + '" role="dialog" aria-modal="true" aria-label="' + d.title + ' rules"><div class="info-box">' +
+      '<span class="d-player p' + D(i.who) + '">' + nm(i.who) + ' opened a domain</span><h2>' + d.title + '</h2><p class="info-who">' + d.who + '</p><p class="info-lead">' + d.lead + '</p><div class="info-grid">';
+    d.sections.forEach(function (s) {
+      h += '<section><h3>' + s.h + '</h3><ul>' + s.lines.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul></section>';
+    });
+    var foot;
+    if (!i.ready) foot = '<button type="button" class="btn big" disabled>Take a moment to read…</button><span class="info-bar"></span>';
+    else if (online() && i.acks[sess.me]) foot = '<button type="button" class="btn big" disabled>Waiting for ' + nm(other) + ' to finish reading…</button>';
+    else foot = '<button type="button" class="btn big" data-info-ok>Got it, continue</button>' + (online() && i.acks[other] ? '<span class="info-wait">' + nm(other) + ' is ready.</span>' : '');
+    return h + '</div><div class="info-foot">' + foot + '</div></div></div>';
+  }
+
+  function renderBattle() {
+    hidePeek();
+    clearInterval(dieTimer);
+    var b = battle, play = b.phase === 'play', over = b.phase === 'over', lit = (play || over) ? (over ? b.winner : b.turn) : b.first;
+    var now = Date.now();
+    localPops = localPops.filter(function (x) { return now - x.t < 1400; });
+    var pend = b.pending && isMine(b.turn) ? b.pending.pool : null;
+    function half(d) {
+      var a = A(d), badge = '';
+      if (!play && !over && b.first === a) badge = '<span class="first-badge">Goes first</span>';
+      if (play && b.turn === a) badge = '<span class="first-badge">' + (online() && !isMine(a) ? 'Their turn' : 'Your turn') + '</span>';
+      if (over && b.winner === a) badge = '<span class="first-badge">Winner!</span>';
+      var domMine = b.domain && b.domain.p === a;
+      var h = '<div class="half p' + d + (lit === a ? ' lit' : '') + (domMine ? ' dom' : '') + '"><div class="half-head"><span class="d-player p' + d + '">' + nm(a) + '</span>' + badge + '</div><div class="hand-row">';
+      b.ids[a].forEach(function (id) {
+        var c = cardDef(id), s = b.cards[id];
+        var pct = Math.max(0, Math.round(100 * s.hp / s.max)), hc = pct > 60 ? 'ok' : pct > 30 ? 'mid' : 'low';
+        var tg = pend && pend.indexOf(id) > -1, chosen = b.pending && b.pending.sel.indexOf(id) > -1;
+        var pops = '', fxc = '', fxd = 0;
+        localPops.forEach(function (x) {
+          if (x.id !== id) return;
+          if (x.txt) pops += '<span class="pop ' + x.cls + '" style="animation-delay:-' + (now - x.t) + 'ms">' + x.txt + '</span>';
+          if (FXCLS[x.cls] && now - x.t < 900) { fxc = FXCLS[x.cls]; fxd = now - x.t; }
+        });
+        var ms = b.cards['perfect-soul'], badge = '';
+        if (ms && !ms.dead && !s.dead) {
+          if (s.p !== ms.p) badge = '<span class="tt-badge" title="Transfiguration Tokens">TT ' + s.tok.tt + '</span>';
+          else if (id === 'perfect-soul') badge = '<span class="tt-badge grace" title="Grace Threshold: an enemy that reaches it is executed after 1 turn">Grace ' + (s.fx.grace || 4) + '</span>';
+        }
+        h += '<div class="b-slot' + (fxc ? ' ' + fxc : '') + '"' + (fxc ? ' style="animation-delay:-' + fxd + 'ms"' : '') + '><button type="button" class="b-card' + (bzs && bzs.id === id ? ' lifted' : '') + (s.dead ? ' dead' : '') + (tg ? ' target' : '') + (chosen ? ' chosen' : '') + (s.confiscated > 0 ? ' conf' : '') + '" data-id="' + id + '" aria-label="' + c.name + ', ' + s.hp + ' HP, ' + s.cet + ' CET' + (s.dead ? ', executed' : '') + '. ' + (tg ? 'Choose as target' : 'Open its actions') + '"><img src="' + c.src + '" alt="">' + badge +
+          '<span class="b-hp ' + hc + '"><b>' + (s.dead ? 'KO' : 'HP ' + s.hp) + '</b><span class="bar"><i style="width:' + pct + '%"></i></span></span></button>' + cetStrip(s.cet) + pops + '</div>';
+      });
+      return h + '</div></div>';
+    }
+    function endScreen() {
+      var mine = online() ? b.winner === sess.me : null;
+      var head = online() ? (mine ? 'Victory' : 'Defeat') : nm(b.winner) + ' wins';
+      var cls = online() ? (mine ? 'won' : 'lost') : 'p' + D(b.winner);
+      function team(d) {
+        var a = A(d), left = living(b, a).length;
+        return '<div class="end-team"><span class="tn p' + d + '">' + nm(a) + '</span>' + b.ids[a].map(function (id) {
+          var s2 = b.cards[id];
+          return '<span class="end-chip' + (s2.dead ? ' dead' : '') + '"><img src="' + tokenSrc(cardDef(id)) + '" alt="' + cardDef(id).name + '">' + (s2.dead ? 'KO' : s2.hp + ' HP') + '</span>';
+        }).join('') + '</div>';
+      }
+      return '<div class="end"><div class="end-box"><span class="end-kicker">Battle over</span><h2 class="end-h ' + cls + '">' + head + '</h2>' +
+        '<div class="end-teams">' + team(2) + team(1) + '</div>' +
+        '<div class="end-btns">' + (online() ? '' : '<button type="button" class="btn" data-nav="play">Play again</button>') + '<button type="button" class="btn' + (online() ? '' : ' ghost') + '" data-nav="menu">Main menu</button><button type="button" class="btn ghost" data-endview>View table</button></div></div></div>';
+    }
+    function rollSide(d) {
+      var a = A(d), v = b.rolls[a];
+      return '<div class="roll-side p' + d + '"><span class="die-name">' + nm(a) + '</span><span class="roll-num' + (v === null ? ' empty' : '') + (b.first === a ? ' win' : '') +
+        '" role="img" aria-label="' + nm(a) + (v === null ? ' has not rolled' : ' rolled ' + v) + '">' + (v === null ? '–' : v) + '</span></div>';
+    }
+    var panel, banner = '';
+    var dn = b.domain;
+    if (dn) banner = '<div class="dom-banner p' + D(dn.p) + '"><b>' + (dn.trial ? 'TRIAL' : 'DOMAIN') + '</b> ' + dn.name + ' · ' + nm(dn.p) + ' · ' + dn.left + ' turn' + (dn.left === 1 ? '' : 's') + ' left</div>';
+    function diceSide(d) {
+      var a = A(d), dc = b.dice, val = null, need = 0, ok = '';
+      dc.items.forEach(function (it, i) {
+        if (it.p !== a) return;
+        if (it.need) need = it.need;
+        if (i < dc.vals.length) { val = dc.vals[i]; if (it.need) ok = val >= it.need ? ' win' : ' fail'; }
+      });
+      return '<div class="roll-side p' + d + '"><span class="die-name">' + nm(a) + '</span><span class="roll-num' + (val === null ? ' empty' : '') + ok + '">' + (val === null ? '–' : val) + '</span><span class="roll-need">' +
+        (need ? 'needs ' + need + '+' + (ok === ' win' ? ' ✓' : ok === ' fail' ? ' ✗' : '') : '&nbsp;') + '</span></div>';
+    }
+    var rollingDie = false;
+    if (b.dice) {
+      var dc = b.dice, cur = dc.items[Math.min(dc.idx, dc.items.length - 1)].p, dready = !dc.rolling && !dc.finished && isMine(cur), dmsg;
+      if (dc.finished) dmsg = dc.items.map(function (it, i) { return nm(it.p) + ' rolled ' + dc.vals[i] + (it.need ? (dc.vals[i] >= it.need ? ' (passed)' : ' (failed)') : ''); }).join(' · ');
+      else if (dc.rolling) dmsg = 'Rolling…';
+      else if (!isMine(cur)) dmsg = 'Waiting for ' + nm(cur) + ' to roll…';
+      else dmsg = nm(cur) + ', click the die to roll.';
+      rollingDie = dc.rolling;
+      panel = '<div class="seam-panel dice-panel"><span class="seam-label">' + T(dc.title) + '</span><div class="roll-row">' + diceSide(1) +
+        '<button type="button" class="die w' + (dready ? D(cur) : 0) + (dready ? ' ready' : '') + (dc.rolling ? ' rolling' : '') + '" data-die aria-label="' + (dready ? 'Roll the die' : 'Die') + '"' + (dready ? '' : ' disabled') + '>' + pipsHTML(dc.rolling ? 1 : (dc.last || 1)) + '</button>' +
+        diceSide(2) + '</div><p class="seam-msg" aria-live="polite">' + dmsg + '</p></div>';
+    } else if (b.coin) {
+      var cn = b.coin, face = cn.face;
+      panel = '<div class="seam-panel dice-panel"><span class="seam-label">' + T(cn.title) + '</span><div class="coin-wrap"><button type="button" class="coin' + (cn.flipping ? ' flipping' : '') + (face ? ' f' + D(face) : '') + '" data-coin' + (cn.flipping || face ? ' disabled' : '') + '>' +
+        (face ? (online() ? nm(face) : 'P' + face) : '<span>Flip</span>') + '</button></div><p class="seam-msg" aria-live="polite">' + (face ? nm(face) + '!' : cn.flipping ? 'Flipping…' : 'Click the coin to flip it. One face is ' + nm(1) + ', the other ' + nm(2) + '.') + '</p></div>';
+    } else if (b.pick) {
+      var pk = b.pick;
+      panel = '<div class="seam-panel"><span class="seam-label">' + T(pk.title) + '</span><div class="turn-row"><span class="d-player p' + D(pk.who) + '">' + nm(pk.who) + '</span></div>' +
+        (isMine(pk.who) ? '<div class="pick-row">' + pk.options.map(function (o) { return '<button type="button" class="btn" data-pick="' + o.k + '">' + T(o.label) + '</button>'; }).join('') + '</div>'
+          : '<p class="seam-msg">Waiting for ' + nm(pk.who) + ' to choose…</p>') +
+        '<p class="seam-msg">' + T(pk.note) + '</p></div>';
+    } else if (over) {
+      panel = endHidden ? '<div class="seam-panel mini"><div class="turn-row"><span class="d-player p' + D(b.winner) + '">' + nm(b.winner) + ' wins</span><button type="button" class="btn" data-endview>Show result</button></div></div>' : endScreen();
+    } else if (!play) {
+      var ready = !b.rolling && !b.lock;
+      var who = b.rolling ? b.rollWho : (b.rolls[1] === null ? 1 : 2);
+      var canRoll = ready && isMine(who);
+      rollingDie = b.rolling;
+      panel = '<div class="seam-panel"><span class="seam-label">Roll for first turn</span><div class="roll-row">' + rollSide(1) +
+        '<button type="button" class="die w' + (canRoll ? D(who) : 0) + (canRoll ? ' ready' : '') + (b.rolling ? ' rolling' : '') + '" data-die aria-label="' + (canRoll ? 'Roll the die' : 'Die') + '"' + (canRoll ? '' : ' disabled') + '>' + pipsHTML(b.dieVal || 1) + '</button>' +
+        rollSide(2) + '</div><p class="seam-msg" aria-live="polite">' + T(b.msg) + '</p></div>';
+    } else {
+      var mineTurn = isMine(b.turn), acts = '';
+      for (var i = 0; i < ACTIONS_PER_TURN; i++) acts += '<i class="act' + (i < b.actions ? ' on' : '') + '"></i>';
+      var shortMsg = T(b.msg), lg = b.log || [];
+      panel = '<div class="seam-panel mini"><div class="turn-row"><span class="d-player p' + D(b.turn) + '">' + nm(b.turn) + '’s turn</span>' +
+        '<span class="acts" role="img" aria-label="' + b.actions + ' of ' + ACTIONS_PER_TURN + ' actions left"><span class="acts-n">' + b.actions + '<small>/' + ACTIONS_PER_TURN + '</small></span>' + acts + '</span>' +
+        (!mineTurn ? '' : b.pending ? (b.pending.multi ? '<button type="button" class="btn" data-confirm' + (b.pending.sel.length ? '' : ' disabled') + '>Confirm' + (b.pending.sel.length ? ' (' + b.pending.sel.length + ')' : '') + '</button>' : '') + '<button type="button" class="btn ghost" data-cancel>Cancel</button>' : '<button type="button" class="btn" data-end>End turn</button>') +
+        (lg.length ? '<button type="button" class="log-btn" data-log aria-expanded="' + logOpen + '">Log</button>' : '') +
+        '</div><p class="seam-msg mini" aria-live="polite">' + shortMsg + '</p></div>';
+      if (logOpen && lg.length) panel += '<div class="log-pop" data-log-pop>' + lg.slice(-8).reverse().map(function (e) { return '<p>' + T(e.t) + '</p>'; }).join('') + '</div>';
+    }
+    arena.innerHTML = '<button type="button" class="btn ghost arena-menu" data-nav="menu">Main menu</button>' + banner + half(2) + '<i class="seam-line"></i>' + panel + half(1) + (b.info ? ruleOverlayHTML(b) : '');
+    // the die is redrawn on every snapshot, so the shuffling pips are a cosmetic loop over the new element
+    if (rollingDie) {
+      var el = arena.querySelector('.die');
+      if (el) dieTimer = setInterval(function () { el.innerHTML = pipsHTML(1 + Math.floor(Math.random() * 6)); }, 90);
+    }
+  }
+
+  /* ----- open card view ----- */
+  function bzLayout() {
+    var vw = window.innerWidth, vh = window.innerHeight, pad = 16;
+    if (vw >= 900) {
+      var optW = 270, cetW = 120, gap = 22;
+      var h = Math.min(vh - 2 * pad, 640), w = h * ASPECT;
+      var maxW = vw - 2 * (Math.max(optW, cetW + 18) + gap + pad);
+      if (w > maxW) { w = Math.max(240, maxW); h = w / ASPECT; }
+      var left = (vw - w) / 2, top = (vh - h) / 2;
+      return { compact: false, float: canHover, card: { left: left, top: top, width: w, height: h },
+        opts: { left: left - gap - optW, top: pad, width: optW, height: vh - 2 * pad },
+        cet: { left: left + w - 18, top: top, width: cetW + 18, height: h } };
+    }
+    var ch = Math.min(vh * 0.42, 400), cw = Math.min(ch * ASPECT, (vw - 2 * pad) * 0.6);
+    ch = cw / ASPECT;
+    var cl = pad + cw - 14, ot = pad + ch + 12;
+    return { compact: true, float: false, card: { left: pad, top: pad, width: cw, height: ch },
+      cet: { left: cl, top: pad, width: vw - pad - cl, height: ch },
+      opts: { left: pad, top: ot, width: vw - 2 * pad, height: Math.max(150, vh - ot - pad) } };
+  }
+
+  function openBZ(id, srcEl) {
+    if (bzs || !battle) return;
+    hidePeek();
+    var c = cardDef(id), from = srcEl.getBoundingClientRect();
+    var big = document.createElement('button');
+    big.type = 'button'; big.className = 'bz-card';
+    big.setAttribute('aria-label', 'Close ' + c.name);
+    big.innerHTML = '<img src="' + c.src + '" alt="' + c.alt + '">';
+    place(big, from);
+    var cet = document.createElement('div'); cet.className = 'bz-cet';
+    var opts = document.createElement('aside'); opts.className = 'bz-opts'; opts.setAttribute('aria-label', c.name + ' actions');
+    var Lo = bzLayout();
+    place(cet, Lo.cet); place(opts, Lo.opts);
+    cet.classList.toggle('compact', Lo.compact); opts.classList.toggle('compact', Lo.compact); opts.classList.toggle('float', Lo.float);
+    bzEl.appendChild(cet); bzEl.appendChild(opts); bzEl.appendChild(big);
+    bzs = { id: id, big: big, cet: cet, opts: opts, closing: false };
+    big.addEventListener('click', closeBZ);
+    fillBZ();
+    renderBattle(); // hides the source card while its copy is open
+    bzEl.hidden = false;
+    big.offsetWidth; // let the start position apply before animating
+    bzEl.classList.add('open');
+    place(big, Lo.card);
+    var cb = opts.querySelector('[data-bzclose]');
+    if (cb) cb.focus({ preventScroll: true });
+  }
+
+  var TIP_DEFAULT = '<span class="tip-sub">Hover an option to see what it does and what it needs.</span>';
+  function setTip(ev) {
+    if (!bzs || !bzs.tips) return;
+    var w = ev.target.closest && ev.target.closest('.opt-wrap');
+    var tip = bzs.opts.querySelector('.opt-tip');
+    if (tip) tip.innerHTML = w ? bzs.tips[w.getAttribute('data-tip')] : TIP_DEFAULT;
+  }
+  bzEl.addEventListener('mouseover', setTip);
+  bzEl.addEventListener('focusin', setTip);
+  bzEl.addEventListener('mouseout', function (ev) { if (ev.target.closest && ev.target.closest('.opt-list') && !(ev.relatedTarget && ev.relatedTarget.closest && ev.relatedTarget.closest('.opt-list'))) setTip({ target: document.body }); });
+
+  function fillBZ() {
+    if (!bzs || !battle) return;
+    var b = battle, s = b.cards[bzs.id], c = cardDef(s.id), mine = b.phase === 'play' && b.turn === s.p && isMine(s.p);
+    var h = '<div class="bz-head"><span class="d-player p' + D(s.p) + '">' + nm(s.p) + '</span><h2>' + c.name + '</h2><div class="bz-meta"><span class="bz-hp">HP <b>' + s.hp + '</b> / ' + s.max + '</span>' +
+      (mine ? '<span class="bz-act">Actions left <b>' + b.actions + '</b> / ' + ACTIONS_PER_TURN + '</span>' : '') + '</div></div><div class="opt-list">';
+    bzs.tips = {};
+    OPTS.forEach(function (k) {
+      var o = optInfo(b, s, k);
+      if (!isMine(s.p) && !o.why) o.why = 'This is your opponent’s card';
+      o.why = T(o.why);
+      bzs.tips[k] = '<b class="tip-h">' + o.label + (o.cost ? ' <span class="tip-cost">' + o.cost + '</span>' : '') + '</b><span class="tip-sub">' + o.sub + '</span>' +
+        (o.fx ? '<span class="tip-fx">' + o.fx + '</span>' : '') + (o.why ? '<span class="tip-why">Can’t use right now: ' + o.why + '</span>' : '<span class="tip-ok">Ready to use</span>');
+      h += '<div class="opt-wrap' + (o.why ? ' off' : '') + '" data-tip="' + k + '"><button type="button" class="opt" data-opt="' + k + '"' + (o.why ? ' disabled' : '') + '>' +
+        '<span class="opt-label">' + o.label + '</span>' + (o.cost ? '<span class="opt-cost">' + o.cost + '</span>' : '<span></span>') +
+        '<span class="opt-sub">' + o.sub + '</span>' + (o.fx ? '<span class="opt-fx">' + o.fx + '</span>' : '') + (o.why ? '<span class="opt-why">' + o.why + '</span>' : '') + '</button></div>';
+    });
+    h += '</div><div class="opt-tip" aria-live="polite">' + TIP_DEFAULT + '</div><button type="button" class="btn ghost bz-close" data-bzclose>Close</button>';
+    bzs.opts.innerHTML = h;
+
+    var d = '', n = Math.min(s.cet, 24);
+    for (var i = 0; i < n; i++) d += '<img class="bz-disc" src="cards/cet.png" alt="">';
+    var mhz = battle.cards['perfect-soul'], ttChip = mhz && !mhz.dead && s.p !== mhz.p ? '<span class="token-chip" style="color:' + TOKENS.tt.color + '" title="Transfiguration Tokens">TT ' + s.tok.tt + '</span>' : '';
+    var chips = ttChip + (c.tokens || []).filter(function (t) { return t !== 'tt'; }).map(function (t) {
+      return '<span class="token-chip" style="color:' + TOKENS[t].color + '" title="' + TOKENS[t].name + '">' + TOKENS[t].abbr + ' ' + s.tok[t] + '</span>';
+    }).join('');
+    bzs.cet.innerHTML = '<div class="bz-cet-head"><span class="bz-cet-label">CET</span><span class="bz-cet-n">' + s.cet + '</span></div>' +
+      '<div class="bz-discs" role="img" aria-label="' + s.cet + ' CET">' + (s.cet ? d : '<span class="bz-none">No CET yet</span>') + '</div>' +
+      (chips ? '<div class="bz-chips">' + chips + '</div>' : '');
+  }
+
+  function closeBZ() {
+    if (!bzs || bzs.closing) return;
+    var cur = bzs;
+    cur.closing = true;
+    bzEl.classList.remove('open');
+    var src = arena.querySelector('.b-card[data-id="' + cur.id + '"]');
+    if (src) place(cur.big, src.getBoundingClientRect());
+    var done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      resetBZ();
+      if (battle && currentScreen === 'battle') renderBattle();
+      var back = arena.querySelector('.b-card[data-id="' + cur.id + '"]');
+      if (back) back.focus({ preventScroll: true });
+    }
+    cur.big.addEventListener('transitionend', function (e) { if (e.propertyName === 'width') finish(); });
+    setTimeout(finish, 500);
+  }
+  function resetBZ() {
+    bzEl.classList.remove('open');
+    [].slice.call(bzEl.querySelectorAll('.bz-card, .bz-cet, .bz-opts')).forEach(function (n) { n.remove(); });
+    bzEl.hidden = true;
+    bzs = null;
+  }
+
+  // Which seat a click acts for. Online it is always you; local play has one screen for both seats.
+  function seatFor(kind) {
+    if (online()) return sess.me;
+    var b = battle;
+    if (kind === 'die') return b.dice ? b.dice.items[Math.min(b.dice.idx, b.dice.items.length - 1)].p : (b.rolls[1] === null ? 1 : 2);
+    if (kind === 'answer') return b.pick.who;
+    if (kind === 'ack') return b.info.who;
+    return b.turn;
+  }
+
+  arena.addEventListener('click', function (ev) {
+    if (!battle) return;
+    if (ev.target.closest('[data-die]')) { send(battle.dice ? { t: 'die' } : { t: 'roll' }, seatFor('die')); return; }
+    if (ev.target.closest('[data-coin]')) { send({ t: 'coin' }, 1); return; }
+    if (ev.target.closest('[data-info-ok]')) { if (battle.info) send({ t: 'ack' }, seatFor('ack')); return; }
+    if (ev.target.closest('[data-endview]')) { endHidden = !endHidden; renderBattle(); return; }
+    if (ev.target.closest('[data-log]')) { logOpen = !logOpen; renderBattle(); return; }
+    if (logOpen && !ev.target.closest('[data-log-pop]')) { logOpen = false; renderBattle(); }
+    if (battle.info) return;
+    var pb = ev.target.closest('[data-pick]');
+    if (pb) { if (battle.pick) send({ t: 'answer', k: pb.getAttribute('data-pick') }, seatFor('answer')); return; }
+    if (ev.target.closest('[data-confirm]')) { send({ t: 'confirm' }, seatFor('turn')); return; }
+    if (battle.dice || battle.coin || battle.pick) return;
+    if (ev.target.closest('[data-end]')) { if (!bzs) send({ t: 'end' }, seatFor('turn')); return; }
+    if (ev.target.closest('[data-cancel]')) { send({ t: 'cancel' }, seatFor('turn')); return; }
+    var c = ev.target.closest('.b-card');
+    if (!c) return;
+    var pd = battle.pending, cid = c.getAttribute('data-id');
+    if (pd) {
+      if (!isMine(battle.turn)) return;
+      if (pd.pool.indexOf(cid) > -1) send({ t: 'target', id: cid }, seatFor('turn'));
+      else toast('Pick one of the glowing cards, or cancel.');
+      return;
+    }
+    openBZ(cid, c);
+  });
+  bzEl.addEventListener('click', function (ev) {
+    var o = ev.target.closest('[data-opt]');
+    if (o) {
+      if (!o.disabled && bzs && !bzs.closing) {
+        var id = bzs.id, key = o.getAttribute('data-opt');
+        closeBZ();
+        send({ t: 'perform', id: id, key: key }, battle.cards[id].p);
+      }
+      return;
+    }
+    if (ev.target.closest('[data-bzclose]') || ev.target === bzBackdrop) closeBZ();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') {
+      if (draft && pendingPick) { pendingPick = null; renderDraft(); }
+      else if (battle && battle.pending && isMine(battle.turn)) send({ t: 'cancel' }, seatFor('turn'));
+      else closeBZ();
+    }
+  });
+  window.addEventListener('resize', function () {
+    if (!bzs || bzs.closing) return;
+    var Lo = bzLayout();
+    place(bzs.big, Lo.card); place(bzs.cet, Lo.cet); place(bzs.opts, Lo.opts);
+    bzs.cet.classList.toggle('compact', Lo.compact); bzs.opts.classList.toggle('compact', Lo.compact); bzs.opts.classList.toggle('float', Lo.float);
+  });
+
+  /* ================================================================================================
+     SESSIONS: where the match server runs and how screens reach it.
+     Local Play: the server lives in this page and this one screen plays both seats.
+     Online: the HOST's page runs the server (the only place the game state is ever changed) and writes each
+     snapshot to the shared db at srv/<host id>. The GUEST's page only reads that document and writes
+     requests under req/<guest id>/q. The db access rules (see the Artifact's capabilities) let a player write
+     only inside their own srv/ and req/ folder, so the guest's page cannot edit the host's snapshot at all.
+     ================================================================================================ */
+  function endSession() {
+    if (sess) { var s = sess; sess = null; try { s.destroy(); } catch (e) {} }
+    resetViews();
+    $('net-bar').hidden = true;
+  }
+  function startLocal() {
+    endSession();
+    var names = ['Player 1', 'Player 2'];
+    var engine = createEngine({ online: false, names: names, publish: function (st) { applyState(st); } });
+    sess = { mode: 'local', me: null, names: names, send: function (a, seat) { return engine.request(seat || 1, a); }, destroy: function () { engine.destroy(); } };
+    engine.start();
+  }
+
+  // Online: the game server runs the match. This page only sends requests and draws the state it receives.
+  function startOnline(v) {
+    endSession();
+    var ch = rooms.channel(), pl = v.match && v.match.players;
+    if (!ch || !pl) { leaveToMenu('Could not start the match.'); return; }
+    var names = [pl[0].name, pl[1].name];
+    sess = { mode: 'online', me: v.role === 'host' ? 1 : 2, names: names,
+      send: function (a) { return ch.act(a).then(function (r) { if (r && r.gone) leaveToMenu('The room no longer exists.'); return r; }); },
+      destroy: function () { ch.onState(null); } };
+    ch.onState(function (st) { applyState(st); });
+  }
+
+  /* ---------- menu: username, Play drop-down, rooms ---------- */
+  var rooms = ServerRooms.create();
+  function leaveAll() { rooms.leaveRoom(); }
+  var $ = function (id) { return document.getElementById(id); };
+  var uInput = $('username');
+  try { var savedName = localStorage.getItem('jcb-username'); if (savedName) uInput.value = rooms.cleanName(savedName); } catch (e) {}
+  uInput.addEventListener('input', function () {
+    try { localStorage.setItem('jcb-username', rooms.cleanName(uInput.value)); } catch (e) {}
+    $('menu-note').textContent = '';
+  });
+  function username() { return rooms.cleanName(uInput.value); }
+  function menuNote(t) { $('menu-note').textContent = t || ''; }
+
+  function setPlayMenu(open) {
+    $('menu-list').classList.toggle('rooms', open);
+    $('m-play').textContent = open ? 'Back' : 'Play';
+    $('m-play').setAttribute('aria-expanded', open ? 'true' : 'false');
+    var drop = ['m-local', 'm-create', 'm-join'], keep = document.querySelectorAll('#menu-list > .btn:not(.drop):not(#m-play)');
+    drop.forEach(function (id) { $(id).hidden = !open; });
+    Array.prototype.forEach.call(keep, function (b) { b.hidden = open; });
+    menuNote('');
+  }
+  $('m-play').addEventListener('click', function () { setPlayMenu(!$('menu-list').classList.contains('rooms')); });
+  $('m-local').addEventListener('click', function () { startLocal(); });
+
+
+  function needName() {
+    if (username()) return true;
+    menuNote('Enter a username first.');
+    uInput.focus();
+    return false;
+  }
+  var roomBusy = false;
+  async function guarded(btn, fn) {
+    if (roomBusy) return;
+    roomBusy = true; btn.disabled = true;
+    try { await fn(); } finally { roomBusy = false; btn.disabled = false; }
+  }
+  $('m-create').addEventListener('click', function () {
+    if (!needName()) return;
+    guarded($('m-create'), async function () {
+      menuNote('Creating room…');
+      var r = await rooms.createRoom(username());
+      if (!r.ok) { menuNote(r.message); return; }
+      menuNote(''); show('lobby'); renderRoom(rooms.view());
+    });
+  });
+  $('m-join').addEventListener('click', function () {
+    if (!needName()) return;
+    $('join-err').textContent = ''; $('join-code').value = '';
+    show('join'); $('join-code').focus();
+  });
+  $('join-code').addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 6); $('join-err').textContent = ''; });
+  $('join-back').addEventListener('click', function () { show('menu'); setPlayMenu(true); });
+  $('join-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var code = $('join-code').value;
+    if (!rooms.isCode(code)) { $('join-err').textContent = 'Room codes are exactly 6 digits.'; return; }
+    guarded($('join-go'), async function () {
+      $('join-err').textContent = 'Joining…';
+      var r = await rooms.joinRoom(code, username());
+      if (!r.ok) { $('join-err').textContent = r.message; return; }
+      $('join-err').textContent = ''; show('lobby'); renderRoom(rooms.view());
+    });
+  });
+
+  /* ---------- lobby and match placeholder ---------- */
+  var CLOSE_TEXT = {
+    'host-left': 'The host closed the room.', 'host-disconnected': 'The host disconnected, so the room was closed.',
+    removed: 'The room no longer exists.', expired: 'The room expired.', 'all-left': 'Everyone left, so the room was closed.',
+    server: 'Lost connection to the room.', closed: 'The room was closed.'
+  };
+  function slotCard(p) {
+    var d = document.createElement('div');
+    d.className = 'ls-slot p' + p.slot + (p.name ? '' : ' empty');
+    var role = document.createElement('span'); role.className = 'ls-role'; role.textContent = 'Player ' + p.slot + ' (' + p.label + ')';
+    var nm = document.createElement('div'); nm.className = 'ls-name'; nm.textContent = p.name || 'Waiting for Player';
+    if (p.name && p.isMe) { var you = document.createElement('span'); you.className = 'ls-you'; you.textContent = '  you'; nm.appendChild(you); }
+    var cn = document.createElement('span');
+    cn.className = 'ls-conn ' + (!p.name ? 'wait' : p.connected ? 'on' : 'off');
+    cn.textContent = !p.name ? 'Empty' : p.connected ? 'Connected' : 'Disconnected';
+    d.appendChild(role); d.appendChild(nm); d.appendChild(cn);
+    return d;
+  }
+  function fillSlots(box, v) {
+    box.textContent = '';
+    v.players.forEach(function (p) { box.appendChild(slotCard(p)); });
+  }
+  function leaveToMenu(note) {
+    leaveAll();
+    show('menu'); setPlayMenu(true);
+    menuNote(note || '');
+  }
+  function netStatus(v) {
+    var bar = $('net-bar');
+    if (!online()) { bar.hidden = true; return; }
+    var host = v.role === 'host', other = v.players[host ? 1 : 0], who = sess.names[host ? 1 : 0], msg = '';
+    if (v.opponentLeft) msg = who + ' left the match.';
+    else if (!other.connected) msg = who + ' disconnected.';
+    if (msg) msg += ' The match cannot continue without them.';
+    bar.textContent = msg; bar.hidden = !msg;
+  }
+  function renderRoom(v) {
+    if (!v || v.loading) return;
+    var cur = currentScreen;
+    var inMatch = cur === 'play' || cur === 'battle' || cur === 'match';
+    if (cur !== 'lobby' && !inMatch) return;
+    if (v.closed) { leaveToMenu(CLOSE_TEXT[v.closed] || CLOSE_TEXT.closed); return; }
+    if (cur === 'lobby') {
+      if (v.match) { show('match'); startOnline(v); return; }
+      $('lobby-code').textContent = v.code;
+      fillSlots($('lobby-slots'), v);
+      var opp = v.players[1];
+      $('lobby-status').textContent = !opp.name ? 'Waiting for an opponent to join. Share the code above.'
+        : !opp.connected ? 'Opponent is not connected.' : v.role === 'host' ? 'Opponent joined. Ready when you are.' : 'Waiting for the host to start the match…';
+      $('lobby-start').hidden = v.role !== 'host';
+      $('lobby-start').disabled = !v.canStart;
+    } else netStatus(v);
+  }
+  rooms.onChange(renderRoom);
+  $('lobby-start').addEventListener('click', function () {
+    guarded($('lobby-start'), async function () {
+      $('lobby-err').textContent = '';
+      var r = await rooms.startMatch();
+      if (!r.ok) $('lobby-err').textContent = r.message;
+    });
+  });
+  $('lobby-copy').addEventListener('click', function () {
+    var b = $('lobby-copy'), code = $('lobby-code').textContent;
+    var done = function (t) { b.textContent = t; setTimeout(function () { b.textContent = 'Copy code'; }, 1400); };
+    try { navigator.clipboard.writeText(code).then(function () { done('Copied'); }, function () { done('Select and copy'); }); } catch (e) { done('Select and copy'); }
+  });
+  $('lobby-leave').addEventListener('click', function () { leaveToMenu(''); });
+  $('match-leave').addEventListener('click', function () { leaveToMenu(''); });
+  window.addEventListener('pagehide', function () { leaveAll(); });
+
+  show('menu');
+})();
+</script>
